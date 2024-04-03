@@ -29,11 +29,6 @@
           FixedHeader="true"
           Loading="@_processing"
           Height="25vh">
-    @* <ToolBarContent>
-        <CustomHeader Name="Расписание акции" 
-                      Icon="@Icons.Material.Filled.CalendarMonth" 
-                      Color="Color.Success"/>
-    </ToolBarContent> *@
     <HeaderContent>
         <MudTh>№</MudTh>
         <MudTh>Канал сбыта</MudTh>
@@ -47,7 +42,6 @@
         <MudTh>Пт</MudTh>
         <MudTh>Сб</MudTh>
         <MudTh>Вс</MudTh>
-        @* <MudTh></MudTh> *@
         <MudTh>
             <AddButton @onclick="OnAddPromoExecution"></AddButton>
         </MudTh>
@@ -100,12 +94,6 @@
                @ondblclick="@(() => EditPromotionExecution(PromoEx))">
             <MudCheckBox Value="@PromoEx.DwSunday" Disabled="true"/>
         </MudTd>
-        @* <MudTd>
-                <EditButton @onclick="@(() => EditPromotionExecution(PromoEx))"></EditButton>
-        </MudTd>
-        <MudTd>
-                <DeleteButton @onclick="@(() => OnDeleteHandler(PromoEx.Id))"></DeleteButton>
-        </MudTd> *@
         <MudTd>
             <ContextMenu OnCreateClick="OnAddPromoExecution" 
                          OnEditClick="@(() => EditPromotionExecution(PromoEx))"
