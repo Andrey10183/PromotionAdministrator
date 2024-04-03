@@ -1,0 +1,226 @@
+﻿@page "/promotionsGroup"
+
+@using Comandante.App.Components.UiComponents.ContextMenu
+@using Comandante.App.Components.UiComponents.Header
+@using Comandante.App.Components.UiComponents.InfoBoard
+@using Comandante.App.Components.UiComponents.OperationButton
+@using Comandante.Domain.Entities
+@using MediatR
+@using Comandante.App.Components
+@using Comandante.App.Helper
+@using Comandante.App.ModelsVm
+@using Comandante.App.Services
+@using Comandante.Application.DomainIntents.PromotionGroup.Command.DeletePromoGroup
+@using Mapster
+
+@inject ISender Sender
+@inject IDialogService DialogService
+@inject SenderService SenderService
+@inject SnackBarService MsgService
+
+<AuthorizeView Roles="MANAGEMENT_PROMOTIONGROUP">
+    <Authorized Context="_">
+        <MudGrid>
+            <MudItem xs="12" Class="ma-1">
+                <MudTable T="PromotionGroup" 
+                          Items="@_promotionGroups"
+                          Hover="true"
+                          SelectOnRowClick="true"
+                          Loading="@_processing"
+                          Filter="new Func<PromotionGroup ,bool>(PromotionGroupFilterFuncWrapper)"
+                          LoadingProgressColor="Color.Info"
+                          Dense=true
+                          Elevation="5"
+                          FixedHeader="true"
+                          RowsPerPage="20"
+                          FixedFooter="true"
+                          Height="calc(100vh - 220px)">
+                    <ToolBarContent>
+                        <CustomHeader Name="Группы акций" Icon="@Icons.Material.Filled.Receipt" Color="Color.Info"/>
+                        <MudSpacer/>
+                        <MudTextField @bind-Value="_searchPromoGroup"
+                                      FullWidth="false"
+                                      Placeholder="Поиск"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search"
+                                      IconSize="Size.Medium" Immediate="true"
+                                      Class="mt-0"/>
+                    </ToolBarContent>
+                    <HeaderContent>
+                        <MudTh><CustomHeader Icon="@Icons.Material.Filled.Numbers" IconSize="Size.Small" Typo="Typo.body2" Name="Код" /></MudTh>
+                        <MudTh><CustomHeader Icon="@Icons.Material.Filled.Article" IconSize="Size.Small" Typo="Typo.body2" Name="Наименование" /></MudTh>
+                        <MudTh><CustomHeader Icon="@Icons.Material.Filled.LowPriority" IconSize="Size.Small" Typo="Typo.body2" Name="Приоритет" /></MudTh>
+                        <MudTh><CustomHeader Icon="@Icons.Material.Filled.FontDownload" IconSize="Size.Small" Typo="Typo.body2" Name="Действует" /></MudTh>
+                        <MudTh><CustomHeader Icon="@Icons.Material.Filled.FontDownloadOff" IconSize="Size.Small" Typo="Typo.body2" Name="Удален" /></MudTh>
+                        <MudTh><CustomHeader Icon="@Icons.Material.Filled.CalendarMonth" IconSize="Size.Small" Typo="Typo.body2" Name="Создан" /></MudTh>
+                        <MudTh><CustomHeader Icon="@Icons.Material.Filled.CalendarMonth" IconSize="Size.Small" Typo="Typo.body2" Name="Изменен" /></MudTh>
+                        <MudTh>
+                            <AddButton @onclick="@OnAddPromoGroup" />
+                        </MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Код"
+                               @ondblclick="@((grEvent) => OnEditPromoGroup(context))">
+                            <b>@context.Code</b>
+                        </MudTd>
+                        <MudTd DataLabel="Наименование"
+                               @ondblclick="@((grEvent) => OnEditPromoGroup(context))">
+                            @context.Name
+                        </MudTd>
+                        <MudTd DataLabel="Приоритет"
+                               @ondblclick="@((grEvent) => OnEditPromoGroup(context))">
+                            @context.Priority
+                        </MudTd>
+                        <MudTd DataLabel="Действует" 
+                               @ondblclick="@((grEvent) => OnEditPromoGroup(context))">
+                            <MudCheckBox Value="@context.IsActive" Disabled="true"/>
+                        </MudTd>
+                        <MudTd DataLabel="Удален"
+                               @ondblclick="@((grEvent) => OnEditPromoGroup(context))">
+                            <MudCheckBox Value="@context.IsDeleted" Disabled="true"/>
+                        </MudTd>
+                        <MudTd DataLabel="Создан"
+                               @ondblclick="@((grEvent) => OnEditPromoGroup(context))">
+                            @context.CreateDateTime
+                        </MudTd>
+                        <MudTd DataLabel="Изменен"
+                               @ondblclick="@((grEvent) => OnEditPromoGroup(context))">
+                            @context.ChangeDateTime
+                        </MudTd>
+                        <MudTd>
+                            <ContextMenu OnCreateClick="@OnAddPromoGroup" 
+                                         OnEditClick="@((grEvent) => OnEditPromoGroup(context))" 
+                                         OnDeleteClick="@(() => OnDeletePromoGroup(context.Code))" 
+                                         OnRefreshClick="@UpdateData" />
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudItem>
+        </MudGrid>
+    </Authorized>
+    <NotAuthorized>
+        @if (@context.User.Identity?.IsAuthenticated ?? false )
+        {
+            <AccessDeniedBoard />
+        }
+        else
+        {
+            <RedirectToLogin/>
+        }
+    </NotAuthorized>
+</AuthorizeView>
+
+
+@code {
+    private List<PromotionGroup> _promotionGroups = new();
+
+    private bool _processing;
+    private bool _editStarted;
+    private string _searchPromoGroup = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UpdateData();
+    }
+    
+    private async Task UpdateData()
+    {
+        _processing = true;
+        
+        _promotionGroups = await SenderService.GetPromotionsGroups();
+
+        _processing = false;
+    }
+
+    private async Task OnAddPromoGroup()
+    {
+        var promoGroup = PromotionGroup.Create();
+        await EditPromoGroup(promoGroup, false);
+
+    }
+
+    private async Task OnEditPromoGroup(PromotionGroup promoGroup)
+    {
+        await EditPromoGroup(promoGroup);
+    }
+
+    private async Task OnDeletePromoGroup(string code)
+    {
+        if (!(await IsDeletionConfirmed()))
+            return;
+
+        if (_processing) return;
+        _processing = true;
+
+        var command = new DeletePromoGroupCommand(code);
+        var result = await Sender.Send(command);
+
+        if (result.IsSuccess)
+        {
+            MsgService.ShowMessage(Severity.Success, "Группа акций успешно удалена");
+            await UpdateData();
+        }
+        else
+        {
+            MsgService.ShowMessage(Severity.Error, $"Ошибка удаления группы акций. {result.Error.Description}");
+        }
+
+        _processing = false;
+    }
+
+    private async Task EditPromoGroup(PromotionGroup promoGroup, bool isEdit = true)
+    {
+        if (_editStarted) return;
+
+        _editStarted = true;
+
+        var promoGroupVm = promoGroup.Adapt<PromotionGroupVm>();
+
+        var parameters = new DialogParameters { ["PromotionGroup"] = promoGroupVm, ["IsEdit"] = isEdit };
+        var dialog = await DialogService.ShowAsync<AddOrEditPromoGroup>(
+            $"Группа акций", 
+            parameters, 
+            DialogOptionsFactory.Create(MaxWidth.ExtraSmall));
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            if (result.Data is PromotionGroup res)
+            {
+                MsgService.ShowMessage(Severity.Success, "Параметры акции успешно обновлены");
+                await UpdateData();
+            }
+            else
+            {
+                MsgService.ShowMessage(Severity.Error, "Ошибка обновления данных акции");
+            }
+        }
+
+        _editStarted = false;
+    }
+
+    private bool PromotionGroupFilterFuncWrapper(PromotionGroup element) => PromotionGroupFilterFunc(element, _searchPromoGroup);
+
+    private bool PromotionGroupFilterFunc(PromotionGroup element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (element.Code.Equals(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (element.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            return true;
+        return false;
+    }
+
+    private async Task<bool> IsDeletionConfirmed()
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Внимание",
+            "Выполнение данного действия приведет к удалению записи из базы данных! Хотите продолжить?",
+            yesText: "Удалить!", cancelText: "Отмена");
+        return result != null ;
+    }
+}

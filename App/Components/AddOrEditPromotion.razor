@@ -1,0 +1,342 @@
+﻿@using Comandante.App.Components.UiComponents.LoadingButton
+@using Comandante.App.ModelsVm
+@using Comandante.Application.DomainIntents.Promotions.Command.CreatePromotion
+@using Comandante.Application.DomainIntents.Promotions.Command.UpdatePromotion
+@using Comandante.Domain.Entities
+@using Mapster
+@using MediatR
+@using Comandante.App.Helper
+@using Comandante.App.Services
+
+@inject ISender Sender
+@inject SenderService SenderService
+
+<MudDialog>
+    <TitleContent>
+        <MudItem Class="d-flex align-content-center">
+            <MudIcon Size="Size.Large" Color="Color.Primary" Icon="@Icons.Material.Filled.GridView"/>
+            <MudText Typo="Typo.h6" Class="pl-4">Акция ID:@Promotion.PromotionId - @Promotion.Name </MudText>
+        </MudItem>
+        
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" Model="@Promotion" @bind-IsValid="@_success">
+            
+            <MudGrid Class="pa-1">
+            <MudItem xs="12" sm="6" Class="d-flex flex-column gap-2">
+                <MudStack Row="true">
+                    <MudTextField Label="Наименование"
+                                  @bind-Value="Promotion.Name"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Article"
+                                  Required="true"
+                                  RequiredError="Обязательное поле"
+                                  Immediate="true"/>
+                </MudStack>
+                <MudItem xs="12" Class="d-flex flex-row gap-6">
+                    <MudItem xs="6">
+                        <MudNumericField Label="ID акции"
+                                         Adornment="Adornment.Start"
+                                         AdornmentIcon="@Icons.Material.Filled.Numbers"
+                                         Disabled="true"
+                                         @bind-Value="Promotion.PromotionId"/>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudNumericField Label="Приортет в группе"
+                                         @bind-Value="Promotion.Priority"
+                                         Adornment="Adornment.Start"
+                                         AdornmentIcon="@Icons.Material.Filled.LowPriority"
+                                         Immediate="true"
+                                         Required="true"
+                                         RequiredError="Обязательное поле"/>
+                    </MudItem>
+                </MudItem>
+
+                <MudItem xs="12" Class="d-flex flex-row gap-6">
+                    <MudItem xs="6">
+                        <MudAutocomplete T="string"
+                                         Label="Группа акций"
+                                         @bind-Value="Promotion.PromotionGroup"
+                                         Adornment="Adornment.Start"
+                                         AdornmentIcon="@Icons.Material.Filled.ViewQuilt"
+                                         SearchFunc="@SearchPromoGroup"
+                                         ResetValueOnEmptyText="true"
+                                         CoerceText="true"
+                                         CoerceValue="true"
+                                         Required="true"
+                                         MaxItems="null"
+                                         RequiredError="Обязательное поле"
+                                         Immediate="true"
+                                         ToStringFunc="@((e) => PromoGroupToUiName(e))"/>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudTextField Label="Номер приказа"
+                                      @bind-Value="Promotion.OrderNumber"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Article"
+                                      Immediate="true"
+                                      Required="true"
+                                      RequiredError="Обязательное поле"/>
+                    </MudItem>
+                </MudItem>
+
+                <MudItem xs="12" Class="d-flex flex-row gap-6">
+                    <MudItem xs="6">
+                        <MudSelect Label="Тип совместимости платежа"
+                                   T="int"
+                                   Adornment="Adornment.Start"
+                                   AdornmentIcon="@Icons.Material.Filled.CompareArrows"
+                                   @bind-Value="Promotion.PaymentCompatibility">
+                            @foreach (var sortType in CalcTypes.PaymentCompabilityTypeValues)
+                            {
+                                <MudSelectItem Value="sortType.Id">
+                                    @sortType.Name
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudTextField Label="Код учета"
+                                      @bind-Value="Promotion.TrCode"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.QrCode"
+                                      Immediate="true"
+                                      Validation="ValidatorFactory.PromoTrSpeCodeCodeValidator.Validation"/>
+                    </MudItem>
+                </MudItem>
+
+                <MudItem xs="12" Class="d-flex flex-row gap-6">
+                    <MudItem xs="6">
+                        <MudSelect Label="Тип напоминания"
+                                   T="string"
+                                   Adornment="Adornment.Start"
+                                   AdornmentIcon="@Icons.Material.Filled.AlarmOn"
+                                   @bind-Value="Promotion.RemindTypeId">
+                            @foreach (var reminderType in CalcTypes.RemindTypetValues)
+                            {
+                                <MudSelectItem Value="reminderType.Id">
+                                    @reminderType.Name
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudTextField Label="Дополнительный код"
+                                      @bind-Value="Promotion.SpeCode"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.QrCode"
+                                      Immediate="true"
+                                      Validation="ValidatorFactory.PromoTrSpeCodeCodeValidator.Validation"/>
+                    </MudItem>
+                </MudItem>
+
+                <MudItem xs="12" Class="d-flex flex-row gap-6">
+                    <MudItem xs="6">
+                        <MudSelect Label="Тип сортировки товара"
+                                   T="string"
+                                   Adornment="Adornment.Start"
+                                   AdornmentIcon="@Icons.Material.Filled.Sort"
+                                   @bind-Value="Promotion.SortType">
+                            @foreach (var sortType in CalcTypes.EventsSortTypeValues)
+                            {
+                                <MudSelectItem Value="sortType.Id">
+                                    @sortType.Name
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudNumericField Label="Не совместим с акцией ID"
+                                         Adornment="Adornment.Start"
+                                         AdornmentIcon="@Icons.Material.Filled.SyncDisabled"
+                                         @bind-Value="Promotion.NextPromotion"/>
+                    </MudItem>
+                </MudItem>
+            </MudItem>
+                <MudItem xs="12" sm="3" Class="d-flex flex-column gap-1">
+                    <MudCheckBox Label="Связь" 
+                                 @bind-Value="Promotion.IsLinked"/>
+                    
+                    <MudCheckBox Label="На кассе"
+                                 @bind-Value="Promotion.IsOnCash" />
+                    
+                    <MudCheckBox Label="Общая корзина"
+                                 @bind-Value="Promotion.IsRepeated" />
+                    
+                    <MudCheckBox Label="Используется для теста"
+                                 @bind-Value="Promotion.IsTest" />
+
+                    <MudCheckBox Label="Разделить по продавцам"
+                                 @bind-Value="Promotion.SeparateBySeller" />
+                    
+                    <MudCheckBox Label="Действует"
+                                 @bind-Value="Promotion.IsActive" />
+                    
+                    <MudCheckBox Label="Удален"
+                                 @bind-Value="Promotion.IsDeleted" />
+                </MudItem>
+                <MudItem xs="12" sm="3" Class="d-flex flex-column gap-1">
+                    <MudTextField
+                        Label="Описание"
+                        @bind-Value="@Promotion.Description"
+                        Variant="Variant.Outlined"
+                        Lines="10"
+                        Adornment="Adornment.Start"
+                        AdornmentIcon="@Icons.Material.Filled.EditNote"
+                        Immediate="true"
+                        Validation="ValidatorFactory.DescriptionValidator.Validation" />
+                    
+                    <MudTextField T="string"
+                                  Label="Дата изменения"
+                                  Disabled="true"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                                  Value="@UiHelper.GetDate(Promotion.ChangeDateTime)"/>
+
+                    <MudTextField T="string"
+                                  Label="Дата Создания"
+                                  Disabled="true"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                                  Value="@UiHelper.GetDate(Promotion.CreateDateTime)" />
+                </MudItem>
+                @if (IsEdit)
+                {
+                    <MudItem>
+                        <PromoExecution PromoId="@Promotion.PromotionId" Disabled="@(!IsEdit)"></PromoExecution>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <LoadingButton OnClick="OnFirstCreate"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Processing="@_processing"
+                       Disabled2="@(Promotion.PromotionId != 0 || _processing || !_success)">
+            Создать
+        </LoadingButton>
+        <LoadingButton OnClick="OnAddOrEdit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Processing="@_processing"
+                   Disabled2="@(!_success || Promotion.PromotionId == 0)">
+            Сохранить
+        </LoadingButton>
+        <MudButton OnClick="OnClose"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary">
+            Отмена
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+
+@code {
+
+    [Parameter] public PromotionVm Promotion { get; set; } = new ();
+
+    [Parameter] public bool IsEdit { get; set; }
+
+    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
+
+    MudForm? _form;
+
+    private bool _success;
+    private bool _processing;
+
+    private List<PromotionGroup> _promotionGroups = new();
+
+    private void OnClose()
+    {
+        MudDialog?.Close(DialogResult.Cancel());
+    }
+
+    private async Task OnFirstCreate()
+    {
+        if (_processing) return;
+        _processing = true;
+
+        var promotion = Promotion.Adapt<Promotion>();
+        var result = await CreatePromotion(promotion);
+
+        if (result is null)
+        {
+            return;
+        }
+
+        Promotion = result.Adapt<PromotionVm>();
+        IsEdit = true;
+
+        _processing = false;
+    }
+
+    private async Task OnAddOrEdit()
+    {
+        _processing = true;
+
+        var promotion = Promotion.Adapt<Promotion>();
+
+        Promotion? result;
+
+        if (IsEdit)
+        {
+            result = await UpdatePromotion(promotion);
+        }
+        else
+        {
+            result = await CreatePromotion(promotion);
+        }
+
+        _processing = false;
+
+        MudDialog?.Close(DialogResult.Ok(result));
+    }
+
+    private async Task<Promotion?> UpdatePromotion(Promotion promotion)
+    {
+        var command = new UpdatePromotionCommand(promotion);
+        var result = await Sender.Send(command);
+
+        return result.Value;
+    }
+
+    private async Task<Promotion?> CreatePromotion(Promotion promotion)
+    {
+        var command = new CreatePromotionCommand(promotion);
+        var result = await Sender.Send(command);
+
+        return result.Value;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _form?.Validate();
+        base.OnAfterRender(firstRender);
+    }
+
+    private Task<IEnumerable<string>> SearchPromoGroup(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return Task.FromResult(UiHelper.GetPromoGroupNames(_promotionGroups));
+
+        return Task.FromResult(UiHelper.GetPromoGroupNames(_promotionGroups
+            .Where(x => x.Code.Contains(value, StringComparison.InvariantCultureIgnoreCase))
+            .ToList()));
+    }
+
+    private string PromoGroupToUiName(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return "";
+
+        var name = _promotionGroups?.FirstOrDefault(x => x.Code == input)?.Name ?? "";
+        return $"{input}.{name}";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _promotionGroups = await SenderService.GetPromotionsGroups();
+    }
+}

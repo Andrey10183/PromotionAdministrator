@@ -1,0 +1,229 @@
+﻿@page "/compatibilities"
+
+@using Comandante.App.Components.UiComponents.ContextMenu
+@using Comandante.App.Components.UiComponents.Header
+@using Comandante.App.Components.UiComponents.InfoBoard
+@using Comandante.App.Components.UiComponents.OperationButton
+@using Comandante.Domain.Entities
+@using MediatR
+@using Comandante.App.Components
+@using Comandante.App.Helper
+@using Comandante.App.ModelsVm
+@using Comandante.App.Services
+@using Comandante.Application.DomainIntents.PromotionGroupsCompatibilities.Command.Delete
+@using Mapster
+
+@inject ISender Sender
+@inject IDialogService DialogService
+@inject SenderService SenderService
+@inject SnackBarService MsgService
+
+<AuthorizeView Roles="MANAGEMENT_PROMOTIONCOMPATIBILITY">
+    <Authorized Context="_">
+<MudGrid>
+    <MudItem xs="12" Class="ma-2">
+        <MudTable T="PromotionGroupsCompatibility"
+                  Items="@_compatibility"
+                  Hover="true"
+                  SelectOnRowClick="true"
+                  Loading="@_processing"
+                  Filter="new Func<PromotionGroupsCompatibility ,bool>(PromotionGroupCompFilterFuncWrapper)"
+                  LoadingProgressColor="Color.Info"
+                  Dense=true
+                  Elevation="5"
+                  FixedHeader="true"
+                  FixedFooter="true"
+                  RowsPerPage="20"
+                  Height="calc(100vh - 220px)">
+            <ToolBarContent>
+                <CustomHeader Name="Совместимость групп акцмй" Icon="@Icons.Material.Filled.Cached" Color="Color.Warning"/>
+                <MudSpacer/>
+                <MudTextField @bind-Value="_searchCompatibility"
+                              FullWidth="false"
+                              Placeholder="Поиск по группам, например 100 400"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium" Immediate="true"
+                              Class="mt-0"/>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh><CustomHeader Icon="@Icons.Material.Filled.ViewQuilt" IconSize="Size.Small" Typo="Typo.body2" Name="Группа X" /></MudTh>
+                <MudTh><CustomHeader Icon="@Icons.Material.Filled.ViewQuilt" IconSize="Size.Small" Typo="Typo.body2" Name="Группа Y" /></MudTh>
+                <MudTh><CustomHeader Icon="@Icons.Material.Filled.CompareArrows" IconSize="Size.Small" Typo="Typo.body2" Name="Совместимость" /></MudTh>
+                <MudTh><CustomHeader Icon="@Icons.Material.Filled.FontDownload" IconSize="Size.Small" Typo="Typo.body2" Name="Действует" /></MudTh>
+                <MudTh><CustomHeader Icon="@Icons.Material.Filled.FontDownloadOff" IconSize="Size.Small" Typo="Typo.body2" Name="Удален" /></MudTh>
+                <MudTh>
+                    <AddButton @onclick="@OnAddCompatibility"></AddButton>
+                </MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Группа X"
+                       @ondblclick="@(() => OnEditCompatibility(context))">
+                    <b>@GetPromoGroupName(context.PromotionGroupX)</b>
+                </MudTd>
+                <MudTd DataLabel="Группа Y"
+                       @ondblclick="@(() => OnEditCompatibility(context))">
+                    <b>@GetPromoGroupName(context.PromotionGroupY)</b>
+                </MudTd>
+                <MudTd DataLabel="Тип совместимости"
+                       @ondblclick="@(() => OnEditCompatibility(context))">
+                    @CalcTypes.PromoGroupCompabilityValues.First(x => x.Id == context.CompatibilityType).Name
+                </MudTd>
+                <MudTd DataLabel="Действует"
+                       @ondblclick="@(() => OnEditCompatibility(context))">
+                    <MudCheckBox Value="@context.IsActive" Disabled="true"/>
+                </MudTd>
+                <MudTd DataLabel="Удален"
+                       @ondblclick="@(() => OnEditCompatibility(context))">
+                    <MudCheckBox Value="@context.IsDeleted" Disabled="true"/>
+                </MudTd>
+                <MudTd>
+                    <ContextMenu OnCreateClick="@OnAddCompatibility"
+                                 OnEditClick="@(() => OnEditCompatibility(context))"
+                                 OnDeleteClick="@(() => OnDeleteCompatibility(context.Id))"
+                                 OnRefreshClick="@UpdateData" />
+                </MudTd>
+            </RowTemplate>
+            <PagerContent >
+                <MudTablePager  />
+            </PagerContent>
+        </MudTable>
+    </MudItem>
+</MudGrid>
+</Authorized>
+<NotAuthorized>
+    @if (@context.User.Identity?.IsAuthenticated ?? false )
+    {
+        <AccessDeniedBoard />
+    }
+    else
+    {
+        <RedirectToLogin/>
+    }
+</NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<PromotionGroupsCompatibility> _compatibility = new();
+    private List<PromotionGroup> _promoGroups = new();
+    private bool _processing;
+    private bool _editStarted;
+    private string _searchCompatibility = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UpdateData();
+    }
+
+    private async Task UpdateData()
+    {
+        _processing = true;
+        
+        _promoGroups = await SenderService.GetPromotionsGroups();
+
+        _compatibility = await SenderService.GetCompatibilitiesGroups();
+
+        _processing = false;
+    }
+
+    private async Task OnAddCompatibility()
+    {
+        var compatibility = PromotionGroupsCompatibility.Create();
+        await EditCompatibility(compatibility, false);
+    }
+
+    private async Task OnEditCompatibility(PromotionGroupsCompatibility compatibility)
+    {
+        await EditCompatibility(compatibility);
+    }
+
+    private async Task OnDeleteCompatibility(int id)
+    {
+        if (!(await IsDeletionConfirmed()))
+            return;
+
+        if (_processing) return;
+        _processing = true;
+            
+        var command = new DeletePromotionGroupsCompatibilityCommand(id);
+        var result = await Sender.Send(command);
+
+        if (result.IsSuccess)
+        {
+            MsgService.ShowMessage(Severity.Success, "Запись совместимости акции успешно удалена");
+            await UpdateData();
+        }
+        else
+        {
+            MsgService.ShowMessage(Severity.Error, $"Ошибка удаления. {result.Error.Description}");
+        }
+
+        _processing = false;
+    }
+
+    private async Task EditCompatibility(PromotionGroupsCompatibility compatibility, bool isEdit = true)
+    {
+        if (_editStarted) return;
+
+        _editStarted = true;
+
+        var compatibilityVm = compatibility.Adapt<PromotionGroupsCompatibilityVm>();
+
+        var parameters = new DialogParameters { ["Compatibility"] = compatibilityVm, ["IsEdit"] = isEdit };
+        var dialog = await DialogService.ShowAsync<AddOrEditPromoGroupCompatibility>(
+            $"Совместимость группы акций", 
+            parameters, 
+            DialogOptionsFactory.Create(MaxWidth.ExtraSmall));
+
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            if (result.Data is PromotionGroupsCompatibility res)
+            {
+                MsgService.ShowMessage(Severity.Success, "Запись совместимости акции успешно сохранена/обновлена");
+                await UpdateData();
+            }
+            else
+            {
+                MsgService.ShowMessage(Severity.Error, "Ошибка обновления сохранения/обновления данных");
+            }
+        }
+
+        _editStarted = false;
+    }
+
+    private bool PromotionGroupCompFilterFuncWrapper(PromotionGroupsCompatibility element) => 
+        PromotionGroupCompFilterFunc(element, _searchCompatibility);
+
+    private static bool PromotionGroupCompFilterFunc(PromotionGroupsCompatibility element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (element.PromotionGroupX.Equals(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (element.PromotionGroupY.Equals(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (searchString.Contains(element.PromotionGroupX) && 
+            searchString.Contains(element.PromotionGroupY))
+            return true;
+
+        return false;
+    }
+
+    private async Task<bool> IsDeletionConfirmed()
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Внимание",
+            "Выполнение данного действия приведет к удалению записи из базы данных! Хотите продолжить?",
+            yesText: "Удалить!", cancelText: "Отмена");
+        return result != null;
+    }
+
+    public string GetPromoGroupName(string promoGroup)
+    {
+        var name = _promoGroups?.FirstOrDefault(x => x.Code == promoGroup)?.Name ?? "";
+        return $"{promoGroup}.{name}";
+    }
+}
+

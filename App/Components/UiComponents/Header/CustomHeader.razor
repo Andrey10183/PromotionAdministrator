@@ -1,0 +1,16 @@
+﻿<MudItem Class="d-flex flex-row align-center gap-1">
+    <MudIcon Size="@IconSize" Icon="@Icon" Color="@Color"></MudIcon>
+    <MudText Typo="@Typo"><b>@Name</b></MudText>
+</MudItem>
+
+@code {
+    [Parameter] public string Name { get; set; }
+
+    [Parameter]public Typo Typo { get; set; } = Typo.h6;
+
+    [Parameter]public Size IconSize { get; set; } = Size.Large;
+
+    [Parameter] public string? Icon { get; set; }
+
+    [Parameter] public Color Color { get; set; } = Color.Default;
+}

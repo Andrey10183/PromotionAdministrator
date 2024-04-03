@@ -1,0 +1,262 @@
+﻿@using Comandante.App.Components.UiComponents.ContextMenu
+@using Comandante.App.Components.UiComponents.Header
+@using Comandante.App.Components.UiComponents.OperationButton
+@using Comandante.Domain.Entities
+@using MediatR
+@using Comandante.Application.DomainIntents.EventGroupDetails.Query.GetEventGroupDetailsByConsitionsIds
+@using System.Reflection.Metadata.Ecma335
+@using Comandante.App.Helper
+@using Comandante.App.ModelsVm
+@using Comandante.App.Services
+@using Comandante.Application.DomainIntents.EventGroupDetails.Command.Delete
+@using Comandante.Application.DomainIntents.EventGroups.Command.Delete
+@using Mapster
+@using Microsoft.EntityFrameworkCore
+
+@inject ISender Sender
+@inject IDialogService DialogService
+@inject SenderService SenderService
+@inject SnackBarService MsgService
+
+@if (ShowToolBar)
+{
+    <MudPaper Elevation="5">
+    <MudToolBar >
+            <CustomHeader Name="События" Icon="@Icons.Material.Filled.Category" Color="Color.Tertiary"/>
+            <MudSpacer/>
+            <MudTextField @bind-Value="_searchEventGroupDetails"
+                          Placeholder="Поиск"
+                          FullWidth="false"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium"
+                          Immediate="true"
+                          Class="pl-4 pb-1"/>
+    </MudToolBar>
+    </MudPaper>   
+}
+
+<MudTable T="EventGroupDetail"
+          Items="@_eventGroupDetails"
+          Style="font-size: 8px"
+          Hover="true"
+          Loading="@_processing"
+          LoadingProgressColor="Color.Info"
+          OnRowClick="OnEventGroupSelect"
+          RowStyleFunc="EventGroupSelectedStyle"
+          Filter="new Func<EventGroupDetail, bool>(PromotionFilterFuncWrapper)"
+          Dense="true"
+          Elevation="5"
+          FixedHeader="true"
+          RowsPerPage="20"
+          FixedFooter="true"
+          ItemSize="20"
+          Height="@Height">
+    <HeaderContent>
+        <MudTh><CustomHeader Icon="@Icons.Material.Filled.ChangeHistory" IconSize="Size.Small" Typo="Typo.body2" Name="Значение" /></MudTh>
+        <MudTh><CustomHeader Icon="@Icons.Material.Filled.MenuBook" IconSize="Size.Small" Typo="Typo.body2" Name="Справочник" /></MudTh>
+        <MudTh><CustomHeader Icon="@Icons.Material.Filled.FilterAlt" IconSize="Size.Small" Typo="Typo.body2" Name="Фильтр" /></MudTh>
+        <MudTh><CustomHeader Icon="@Icons.Material.Filled.Category" IconSize="Size.Small" Typo="Typo.body2" Name="Параметер" /></MudTh>
+        <MudTh><CustomHeader Icon="@Icons.Material.Filled.EditNote" IconSize="Size.Small" Typo="Typo.body2" Name="Описание" /></MudTh>
+        <MudTh>
+            <AddButton @onclick="@(() => OnAddHandler(EventGroupId))" />
+        </MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Значение"
+               @ondblclick="@((grEvent) => OnEditHandler(context))">
+            <b>@context.Value</b>
+        </MudTd>
+        <MudTd DataLabel="Тип Справочника"
+               @ondblclick="@((grEvent) => OnEditHandler(context))">
+            @CalcTypes.CatalogTypes.First(x => x.Id == context.CatalogTypeId)?.Name
+        </MudTd>
+        <MudTd DataLabel="Тип фильтра"
+               @ondblclick="@((grEvent) => OnEditHandler(context))">
+            @CalcTypes.FilterTypes.First(x => x.Id == context.FilterTypeId)?.Name
+        </MudTd>
+        <MudTd DataLabel="Тип параметра"
+               @ondblclick="@((grEvent) => OnEditHandler(context))">
+            @CalcTypes.CatalogParams.First(x => x.Id == context.CatalogParamTypeId)?.Name
+        </MudTd>
+        <MudTd DataLabel="Описание"
+               @ondblclick="@((grEvent) => OnEditHandler(context))">
+            @context.Description
+        </MudTd>
+        <MudTd>
+            <MudItem Class="d-flex justify-center align-center">
+            <ContextMenu OnCreateClick="@(() => OnAddHandler(EventGroupId))"
+                         OnEditClick="@((grEvent) => OnEditHandler(context))"
+                         OnDeleteClick="@(() => OnDeleteHandler(context.Id))"
+                         OnRefreshClick="@Update"/>
+            </MudItem>
+        </MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager/>
+    </PagerContent>
+</MudTable>
+
+@code {
+    [Parameter] public string? EventGroupId { get; set; }
+
+    [Parameter] public string Height { get; set; } = string.Empty;
+
+    [Parameter] public bool ShowToolBar { get; set; } = false;
+
+    private EventGroupDetail? _selectedEventGroup;
+    private List<EventGroupDetail> _eventGroupDetails = new();
+
+    private bool _processing;
+    private string _searchEventGroupDetails = string.Empty;
+    
+
+    private async Task AddEventGroupDetail(string? eventGroupId)
+    {
+        if (string.IsNullOrEmpty(eventGroupId))
+        {
+            return;
+        }
+
+        var eventGroupDetail = EventGroupDetail.Create(eventGroupId);
+
+        await EditEventGroupDetail(eventGroupDetail, isEdit: false);
+    }
+
+    private async Task EditEventGroupDetail(EventGroupDetail eventGroupDetail, bool isEdit = true)
+    {
+        var eventGroupDetailVm = eventGroupDetail.Adapt<EventGroupDetailVm>();
+
+        var parameters = new DialogParameters { ["GroupDetail"] = eventGroupDetailVm, ["IsEdit"] = isEdit };
+
+        var dialog = await DialogService.ShowAsync<AddOrEditGroupDetails>(
+            $"Событие", 
+            parameters, 
+            DialogOptionsFactory.Create(MaxWidth.Small));
+
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            bool.TryParse(result.Data.ToString(), out bool successUpdate);
+            if (successUpdate)
+            {
+                MsgService.ShowMessage(Severity.Success, "Параметры события успешно обновлены");
+            }
+            else
+            {
+                MsgService.ShowMessage(Severity.Error, "Ошибка обновления данных события");
+            }
+        }
+    }
+
+    private async Task OnAddHandler(string? promoId)
+    {
+        await AddEventGroupDetail(promoId);
+        await Update();
+        _selectedEventGroup = _eventGroupDetails.MaxBy(x => x.Id);
+    }
+
+    private async Task OnEditHandler(EventGroupDetail input)
+    {
+        await EditEventGroupDetail(input, true);
+        await Update();
+    }
+
+    private async Task OnDeleteHandler(int id)
+    {
+        if (!(await IsDeletionConfirmed()))
+            return;
+
+        if (_processing) return;
+        _processing = true;
+
+        var command = new DeleteEventGroupDetailsCommand(id);
+        var result = await Sender.Send(command);
+
+        if (result.IsSuccess)
+        {
+            MsgService.ShowMessage(Severity.Success, "Группа событий успешно удалена");
+            await Update();
+        }
+        else
+        {
+            MsgService.ShowMessage(Severity.Error, $"Ошибка удаления группы событий. {result.Error.Description}");
+        }
+
+        _processing = false;
+    }
+    
+    protected override async Task OnParametersSetAsync()
+    {
+        if ((EventGroupId == null && _selectedEventGroup == null) ||
+            (EventGroupId!=null && EventGroupId.Equals(_selectedEventGroup?.EventGroupId)))
+            return;
+
+        if (string.IsNullOrEmpty(EventGroupId))
+        {
+            ClearComponent();
+
+            StateHasChanged();
+            return;
+        }
+
+        _processing = true;
+        StateHasChanged();
+
+        _eventGroupDetails = await SenderService.GetEventGroupDetails(EventGroupId);
+
+        _selectedEventGroup = _eventGroupDetails?.Any() == true ? 
+            _eventGroupDetails.First() : 
+            null;
+
+        _processing = false;
+        StateHasChanged();
+    }
+
+    private void OnEventGroupSelect(TableRowClickEventArgs<EventGroupDetail> p)
+    {
+        _selectedEventGroup = p.Item;
+    }
+
+    private string EventGroupSelectedStyle(EventGroupDetail arg1, int index)
+    {
+        if (_selectedEventGroup is null) return string.Empty;
+
+        return StyleHelper.GetSelectedRowStyle(_selectedEventGroup.Id == arg1.Id);
+    }
+
+    private void ClearComponent()
+    {
+        _selectedEventGroup = null;
+        _eventGroupDetails = new();
+    }
+
+    private async Task Update()
+    {
+        _eventGroupDetails = await SenderService.GetEventGroupDetails(EventGroupId);
+    }
+
+    private bool CanAddGroupDetails() => _selectedEventGroup != null;
+    
+    private async Task<bool> IsDeletionConfirmed()
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Внимание",
+            "Выполнение данного действия приведет к удалению записи из базы данных! Учтите, что данное событие будет отвязано от всех привязанных событий и перманентно удалено! Хотите продолжить?",
+            yesText: "Удалить!", cancelText: "Отмена");
+        return result != null;
+    }
+
+    private bool PromotionFilterFuncWrapper(EventGroupDetail element) => 
+        PromotionFilterFunc(element, _searchEventGroupDetails);
+
+    private bool PromotionFilterFunc(EventGroupDetail element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (element.Value != null && element.Value.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+}

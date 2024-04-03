@@ -1,0 +1,358 @@
+﻿@page "/promotions"
+
+@using Comandante.App.Components.UiComponents.ContextMenu
+@using Comandante.App.Components.UiComponents.InfoBoard
+@using Comandante.Domain.Entities
+@using Comandante.Domain.Enums
+@using MediatR
+@using Comandante.App.Components
+@using Comandante.App.ModelsVm
+@using Comandante.App.Services
+@using Comandante.Application.DomainIntents.Promotions.Command.Delete
+@using Comandante.App.Components.UiComponents.Header
+@using Comandante.App.Components.UiComponents.OperationButton
+@using Comandante.App.Helper
+@using Comandante.Application.DomainIntents.Promotions.Command.Duplicate
+@using Mapster
+
+@inject ISender Sender
+@inject IDialogService DialogService
+@inject SenderService SenderService
+@inject SnackBarService MsgService
+
+<AuthorizeView Roles="MANAGEMENT_PROMOTION">
+    <Authorized Context="_">
+        <MudGrid Class="pa-1 mud-height-full" Spacing="1">
+            <MudItem xs="12" sm="4">
+                <MudSelect T="PromotionsTypes"
+                           Adornment="Adornment.Start"
+                           Value="@_selectedPromotionsTypes"
+                           Label="Выберите тип акции"
+                           AnchorOrigin="Origin.BottomCenter"
+                           ValueChanged="OnPromotionTypeChange"
+                           ToStringFunc="@_promotionConverter"
+                           Disabled="@_processing"
+                           Variant="Variant.Filled">
+                    @foreach (var promotionType in _promotionTypes)
+                    {
+                        <MudSelectItem Value="@(promotionType)">
+                            <MudItem Class="d-flex flex-row align-center gap-3">
+                                <MudIcon Icon="@GetUiIcon(promotionType)" Size="Size.Small"></MudIcon>
+                                <MudText>@promotionType.GetUiName()</MudText>
+                            </MudItem>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTable T="Promotion"
+                          Class="pt-1"
+                          Items="@_promotions"
+                          Style="font-size: 10px"
+                          Hover="true"
+                          SelectOnRowClick="true"
+                          Loading="@_processing"
+                          OnRowClick="@OnPromotionSelect"
+                          Filter="new Func<Promotion, bool>(PromotionFilterFuncWrapper)"
+                          RowStyleFunc="PromotionSelectedStyle"
+                          LoadingProgressColor="Color.Info"
+                          Dense=true
+                          Elevation="5"
+                          FixedHeader="true"
+                          RowsPerPage="20"
+                          FixedFooter="true"
+                          Height="calc(100vh - 278px)">
+                
+                    <ToolBarContent>
+                        <CustomHeader Name="Акции" Icon="@Icons.Material.Filled.Dashboard" Color="Color.Primary"/>
+                        <MudTextField @bind-Value="_searchPromo"
+                                      Placeholder="Поиск"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search"
+                                      IconSize="Size.Medium"
+                                      Immediate="true"
+                                      Class="pl-4"/>
+                    </ToolBarContent>
+                    <HeaderContent>
+                        <MudTh><CustomHeader Icon="@Icons.Material.Filled.Numbers" IconSize="Size.Small" Typo="Typo.body2" Name="Код" /></MudTh>
+                        <MudTh><CustomHeader Icon="@Icons.Material.Filled.Article" IconSize="Size.Small" Typo="Typo.body2" Name="Название" /></MudTh>
+                        <MudTh>
+                            <AddButton @onclick="@AddPromotion"/>
+                        </MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="ID"
+                               @ondblclick="@(() => EditPromotion(context))">
+                            <b>@context.PromotionId</b>
+                        </MudTd>
+                        <MudTd DataLabel="Название"
+                               @ondblclick="@(() => EditPromotion(context))">
+                            @context.Name
+                        </MudTd>
+                        <MudItem Class="d-flex justify-center align-center">
+                            <ContextMenu OnCreateClick="@AddPromotion" 
+                                         OnEditClick="@(() => EditPromotion(context))"
+                                         OnDeleteClick="@(() => OnDeletePromotion(context.PromotionId))"
+                                         OnDuplicateNewEvents="@(() => OnDuplicate(context.PromotionId, PromotionDuplicateProperty.DuplicateWithNewDetails))"
+                                         OnDuplicateExistedEvents="@(() => OnDuplicate(context.PromotionId, PromotionDuplicateProperty.DuplicateWithExistedDetails))"
+                                         OnDuplicateNoEvents="@(() => OnDuplicate(context.PromotionId, PromotionDuplicateProperty.DuplicateWithNoDetails))"
+                                         OnRefreshClick="@(() => UpdateData(_selectedPromotionsTypes))"/>
+                        </MudItem>
+                            
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager HideRowsPerPage="true"/>
+                    </PagerContent>
+                </MudTable>
+            </MudItem>
+            <MudItem xs="12" sm="8">
+                <MudItem Class="flex-grow-0 pt-1">
+                    <PromotionConditions PromoId="_selectedPromotion?.PromotionId"
+                                         OnRowClick="OnPromoCondSelect" 
+                                         Height="40vh" />
+                </MudItem>
+                <MudItem Class="flex-grow-1 pt-2">
+                    <EventGroupDetails EventGroupId="@_selectedPromoCondition?.EventGroupId" 
+                                       Height="calc(60vh - 160px)" 
+                                       ShowToolBar="false"/>
+                </MudItem>
+            </MudItem>
+        </MudGrid>
+    </Authorized>
+    <NotAuthorized>
+        @if (@context.User.Identity?.IsAuthenticated ?? false )
+        {
+            <AccessDeniedBoard />
+        }
+        else
+        {
+            <RedirectToLogin/>
+        }
+    </NotAuthorized>
+</AuthorizeView>
+
+
+@code {
+
+    private List<Promotion> _promotions = new();
+    private List<PromotionCondition> _promotionsConditions = new();
+
+    private PromotionsTypes _selectedPromotionsTypes = PromotionsTypes.WorkingNowPromotions;
+    private Promotion? _selectedPromotion;
+    private PromotionCondition? _selectedPromoCondition;
+
+    private bool _processing;
+    private bool _editStarted;
+    private string _searchPromo = string.Empty;
+
+    private readonly List<PromotionsTypes> _promotionTypes = PromotionsTypes.FuturePromotions.GetValues();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UpdateData(PromotionsTypes.WorkingNowPromotions);
+    }
+
+    private async Task OnDuplicate(int promoId, PromotionDuplicateProperty duplicateProperty)
+    {
+        if (!(await IsDuplicateConfirmed(duplicateProperty)))
+            return;
+
+        var command = new DuplicatePromotionCommand(duplicateProperty, promoId);
+        var result = await Sender.Send(command);
+
+        if (result.IsSuccess)
+        {
+            MsgService.ShowMessage(Severity.Success, $"Акция успешно дублирована");
+            await UpdateData(_selectedPromotionsTypes);
+
+            var createdPromotion = _promotions.FirstOrDefault(x => x.PromotionId == result?.Value?.PromotionId);
+
+            if (createdPromotion != null)
+            {
+                _selectedPromotion = createdPromotion;
+            }
+        }
+        else
+        {
+            MsgService.ShowMessage(Severity.Error, $"Ошибка дублирования акции. {result.Error.Description}");
+        }
+    }
+
+    private async Task OnDeletePromotion(int id)
+    {
+        if (!(await IsDeletionConfirmed()))
+            return;
+
+        var command = new DeletePromotionCommand(id);
+        var result = await Sender.Send(command);
+
+        if (result.IsSuccess)
+        {
+            MsgService.ShowMessage(Severity.Success, $"Акция успешно удалена. Всего удалено {result.Value} записей");
+            await UpdateData(_selectedPromotionsTypes);
+        }
+        else
+        {
+            MsgService.ShowMessage(Severity.Error, $"Ошибка удаления акции. {result.Error.Description}");
+        }
+    }
+
+    private async Task<bool> IsDeletionConfirmed()
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Внимание",
+            "Выполнение данного действия приведет к удалению записи из базы данных! Обратите внимание, что при удалении акции также будут удалены расписания акции, условия акции и связанные с ними события в случае если эти события не используются в других акциях. Хотите продолжить?",
+            yesText: "Удалить!", cancelText: "Отмена");
+        return result != null;
+    }
+
+    private async Task<bool> IsDuplicateConfirmed(PromotionDuplicateProperty duplicateProperty)
+    {
+        var message = duplicateProperty switch
+        {
+            PromotionDuplicateProperty.DuplicateWithExistedDetails => "Будет создана новая копия акции с копией условий. К условиям будет осуществлена привязка копируемых событий. Новые события созданы не будут. Продолжить?",
+            PromotionDuplicateProperty.DuplicateWithNewDetails => "Будет создана новая копия акции с копией условий. Помимо этого будут созданы новые события (Копия существующих событий). Продолжить?",
+            PromotionDuplicateProperty.DuplicateWithNoDetails => "Будет создана новая копия акции с копией условий. Копирование событий происходить не будет (Список событий будет пустым). Продолжить?",
+            _ => string.Empty
+        };
+
+        var result = await DialogService.ShowMessageBox(
+            "Внимание",
+            message,
+            yesText: "Копировать!", cancelText: "Отмена");
+        return result != null;
+    }
+
+    private async Task UpdateData(PromotionsTypes promotionsTypes)
+    {
+        _processing = true;
+        StateHasChanged();
+
+        _promotions = await SenderService.GetPromotions(promotionsTypes);
+
+        if (_promotions.Any())
+        {
+            var selectedPromo = _promotions.First();
+            _selectedPromotion = selectedPromo;
+
+            _promotionsConditions = await SenderService.GetPromoConditions(selectedPromo.PromotionId);
+            _selectedPromoCondition = _promotionsConditions.FirstOrDefault();
+        }
+        else
+        {
+            _selectedPromotion = null;
+            _selectedPromoCondition = null;
+        }
+
+        _processing = false;
+        StateHasChanged();
+    }
+
+    private async Task OnPromotionTypeChange(PromotionsTypes promoType)
+    {
+        _selectedPromotionsTypes = promoType;
+        await UpdateData(promoType);
+    }
+
+    private void OnPromotionSelect(TableRowClickEventArgs<Promotion> p)
+    {
+        if (_selectedPromotion?.PromotionId == p.Item.PromotionId)
+            return;
+
+        _selectedPromotion = p.Item;
+        StateHasChanged();
+    }
+
+    private void OnPromoCondSelect(PromotionCondition p)
+    {
+        if (_selectedPromoCondition?.Id == p?.Id)
+            return;
+
+        _selectedPromoCondition = p;
+    }
+    
+    #region Utility
+
+    readonly Func<PromotionsTypes, string> _promotionConverter = p => p.GetUiName();
+
+    private bool PromotionFilterFuncWrapper(Promotion element) => PromotionFilterFunc(element, _searchPromo);
+
+    private bool PromotionFilterFunc(Promotion element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (element.PromotionId.ToString().Equals(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (element.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            return true;
+        return false;
+    }
+
+    private string PromotionSelectedStyle(Promotion arg1, int index)
+    {
+        if (_selectedPromotion is null) return string.Empty;
+
+        return StyleHelper.GetSelectedRowStyle(_selectedPromotion.PromotionId == arg1.PromotionId);
+    }
+
+    public static string GetUiIcon(PromotionsTypes promotionTypes)
+    {
+        return promotionTypes switch
+        {
+            PromotionsTypes.WorkingNowPromotions => @Icons.Material.Filled.StarBorder,
+            PromotionsTypes.FuturePromotions => @Icons.Material.Filled.HourglassTop,
+            PromotionsTypes.PastPromotions => @Icons.Material.Filled.HourglassBottom,
+            PromotionsTypes.TestPromotions => @Icons.Material.Filled.Construction,
+            PromotionsTypes.NotActivePromotions => @Icons.Material.Filled.CommentsDisabled,
+            _ => "Не определено"
+        };
+    }
+
+    #endregion
+    
+    #region Promotions
+
+    private async Task EditPromotion(Promotion promotion, bool isEdit = true)
+    {
+        if (_editStarted) return;
+
+        _editStarted = true;
+
+        var promotionVm = promotion.Adapt<PromotionVm>();
+
+        var parameters = new DialogParameters { ["Promotion"] = promotionVm, ["IsEdit"] = isEdit };
+        var dialog = await DialogService.ShowAsync<AddOrEditPromotion>(
+            $"Акция", 
+            parameters, 
+            DialogOptionsFactory.Create(MaxWidth.Large));
+
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            if (result.Data is Promotion res)
+            {
+                MsgService.ShowMessage(Severity.Success, "Параметры акции успешно обновлены");
+                await UpdateData(_selectedPromotionsTypes);
+
+                if (_promotions.Select(x => x.PromotionId).Contains(res.PromotionId))
+                {
+                    _selectedPromotion = res;
+                }
+            }
+            else
+            {
+                MsgService.ShowMessage(Severity.Error, "Ошибка обновления данных акции");
+            }    
+        }
+
+        _editStarted = false;
+    }
+
+    private async Task AddPromotion()
+    {
+        var promotion = Promotion.Create();
+        await EditPromotion(promotion, false);
+    }
+
+    #endregion
+}
+

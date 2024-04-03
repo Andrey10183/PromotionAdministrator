@@ -1,0 +1,197 @@
+﻿@using Comandante.App.Components.UiComponents.LoadingButton
+@using Comandante.App.Helper
+@using Comandante.App.ModelsVm
+@using Comandante.Application.DomainIntents.EventGroupDetails.Command.CreateEventGroupDetails
+@using Comandante.Application.DomainIntents.EventGroupDetails.Command.UpdateGroupDetails
+@using Comandante.Domain.Entities
+@using Mapster
+@using MediatR
+
+@inject ISender Sender
+
+<MudDialog>
+    <TitleContent>
+        <MudItem Class="d-flex align-content-center">
+            <MudIcon Size="Size.Large" Color="Color.Primary" Icon="@Icons.Material.Filled.GridView" />
+            <MudText Typo="Typo.h6" Class="pl-4">Событие для группы @GroupDetail.EventGroupId </MudText>
+        </MudItem>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" Model="@GroupDetail" @bind-IsValid="@_success">
+            <MudGrid Class="pa-2">
+                <MudItem xs="12" sm="6" Class="d-flex flex-column gap-1">
+                    <MudNumericField Label="ID события"
+                                     Adornment="Adornment.Start"
+                                     AdornmentIcon="@Icons.Material.Filled.Numbers"
+                                     Disabled="true"
+                                     @bind-Value="GroupDetail.Id" />
+
+                    <MudTextField Label="Значение"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.ChangeHistory"
+                                  @bind-Value="GroupDetail.Value"
+                                  Validation="ValidatorFactory.GroupDetailValueValidator.Validation"
+                                  Immediate="true" />
+
+                    <MudSelect Label="Тип справочника"
+                               T="string"
+                                   Adornment="Adornment.Start"
+                               AdornmentIcon="@Icons.Material.Filled.MenuBook"
+                               @bind-Value="GroupDetail.CatalogTypeId">
+                        @foreach (var catalogType in CalcTypes.CatalogTypes)
+                        {
+                            <MudSelectItem Value="catalogType.Id">
+                                @catalogType.Name
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudSelect Label="Тип параметра"
+                               T="string"
+                               Adornment="Adornment.Start"
+                               AdornmentIcon="@Icons.Material.Filled.Category"
+                               @bind-Value="GroupDetail.CatalogParamTypeId">
+                        @foreach (var catalogParam in CalcTypes.CatalogParams)
+                        {
+                            <MudSelectItem Value="catalogParam.Id">
+                                @catalogParam.Name
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudSelect Label="Тип фильтра"
+                               Adornment="Adornment.Start"
+                               AdornmentIcon="@Icons.Material.Filled.FilterAlt"
+                               T="string"
+                               @bind-Value="GroupDetail.FilterTypeId">
+                        @foreach (var filterType in CalcTypes.FilterTypes)
+                        {
+                            <MudSelectItem Value="filterType.Id">
+                                @filterType.Name
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                
+                <MudItem xs="12" sm="6" Class="d-flex flex-column gap-1">
+                    <MudTextField
+                        Label="Описание"
+                        @bind-Value="@GroupDetail.Description"
+                        Variant="Variant.Outlined"
+                        Lines="7"
+                        Adornment="Adornment.Start"
+                        AdornmentIcon="@Icons.Material.Filled.EditNote"
+                        Immediate="true"
+                        Validation="ValidatorFactory.DescriptionValidator.Validation"/>
+                    
+                    <MudTextField T="string"
+                                  Label="Дата изменения"
+                                  Disabled=true
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                                  Value="@UiHelper.GetDate(GroupDetail.ChangeDateTime)" />
+
+                    <MudTextField T="string"
+                                  Label="Дата Создания"
+                                  Disabled="true"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                                  Value="@UiHelper.GetDate(GroupDetail.CreateDateTime)" />
+                </MudItem>
+            
+            </MudGrid>
+            <MudGrid>
+                <MudItem Class="d-flex flex-row gap-5">
+                    <MudItem>
+                        <MudCheckBox Label="Активен"
+                                     @bind-Value="GroupDetail.IsActive"/>
+                    </MudItem>
+                    <MudItem>
+                        <MudCheckBox Label="Удален"
+                                     @bind-Value="GroupDetail.IsDeleted"/>
+                    </MudItem>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <LoadingButton OnClick="OnAddOrEdit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled2="!_success"
+                   Processing="_processing">
+            Сохранить
+        </LoadingButton>
+        <MudButton OnClick="OnClose"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary">
+            Отмена
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+
+@code {
+
+    [Parameter] public EventGroupDetailVm GroupDetail { get; set; } = new();
+
+    [Parameter] public bool IsEdit { get; set; }
+
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    MudForm? _form;
+
+    private bool _success;
+    private bool _processing;
+
+    private void OnClose()
+    {
+        MudDialog.Close(DialogResult.Cancel());
+    }
+
+    private async Task OnAddOrEdit()
+    {
+        if (_processing) return;
+        _processing = true;
+
+        var groupDetail = GroupDetail.Adapt<EventGroupDetail>();
+
+        bool result;
+
+        if (IsEdit)
+        {
+            result = await UpdateGroupDetails(groupDetail);
+        }
+        else
+        {
+            result = await CreateGroupDetails(groupDetail);
+        }
+
+        MudDialog.Close(DialogResult.Ok(result));
+
+        _processing = false;
+    }
+
+    private async Task<bool> UpdateGroupDetails(EventGroupDetail eventGroupDetail)
+    {
+        var command = new UpdateGroupDetailCommand(eventGroupDetail);
+        var result = await Sender.Send(command);
+
+        return result.IsSuccess;
+    }
+
+    private async Task<bool> CreateGroupDetails(EventGroupDetail eventGroupDetail)
+    {
+        var command = new CreateEventGroupDetailsCommand(eventGroupDetail);
+        var result = await Sender.Send(command);
+
+        return result.IsSuccess;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _form?.Validate();
+        base.OnAfterRender(firstRender);
+    }
+}
+

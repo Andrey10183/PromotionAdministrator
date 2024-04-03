@@ -1,0 +1,198 @@
+﻿@using Comandante.App.Components.UiComponents.ContextMenu
+@using Comandante.App.Components.UiComponents.Header
+@using Comandante.App.Components.UiComponents.OperationButton
+@using Comandante.App.Helper
+@using Comandante.Domain.Entities
+@using MediatR
+@using Microsoft.AspNetCore.Identity.UI.Services
+@using Comandante.Application.DomainIntents.PromotionExecution.Query.GetPromotionExecutionByPromoId
+@using Mapster
+@using Microsoft.AspNetCore.Components
+@using Comandante.App.ModelsVm
+@using Comandante.App.Services
+@using Comandante.Application.DomainIntents.PromotionExecution.Command.Delete
+@using MudBlazor
+
+@inject ISender Sender
+@inject IDialogService DialogService
+@inject SenderService SenderService
+@inject SnackBarService MsgService
+
+
+<MudTable Items="@PromotionExecution"
+          Class="border-dotted border-2 mud-border-primary"
+          Context="PromoEx"
+          Style="font-size: 8px"
+          Hover="true"
+          Dense="true"
+          Elevation="0"
+          FixedHeader="true"
+          Loading="@_processing"
+          Height="25vh">
+    @* <ToolBarContent>
+        <CustomHeader Name="Расписание акции" 
+                      Icon="@Icons.Material.Filled.CalendarMonth" 
+                      Color="Color.Success"/>
+    </ToolBarContent> *@
+    <HeaderContent>
+        <MudTh>№</MudTh>
+        <MudTh>Канал сбыта</MudTh>
+        <MudTh>Точка продаж</MudTh>
+        <MudTh>Дата начала</MudTh>
+        <MudTh>Дата окончания</MudTh>
+        <MudTh>Пн</MudTh>
+        <MudTh>Вт</MudTh>
+        <MudTh>Ср</MudTh>
+        <MudTh>Чт</MudTh>
+        <MudTh>Пт</MudTh>
+        <MudTh>Сб</MudTh>
+        <MudTh>Вс</MudTh>
+        @* <MudTh></MudTh> *@
+        <MudTh>
+            <AddButton @onclick="OnAddPromoExecution"></AddButton>
+        </MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="№"
+               @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            <b>@PromoEx.Id</b>
+        </MudTd>
+        <MudTd DataLabel="Канал сбыта"
+               @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            @CalcTypes.SaleChannelsValues.FirstOrDefault(x => x.Id == PromoEx.SalesChannelId)?.Name
+        </MudTd>
+        <MudTd DataLabel="Точка продаж"
+               @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            @PromoEx.ShopCode
+        </MudTd>
+        <MudTd DataLabel="Дата начала"
+               @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            @PromoEx.BeginDate.Date.Add(PromoEx.BeginTime.Value.TimeOfDay)
+        </MudTd>
+        <MudTd DataLabel="Дата окончания"
+               @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            @PromoEx.EndDate.Date.Add(PromoEx.EndTime.Value.TimeOfDay)
+        </MudTd>
+        <MudTd DataLabel="Пн"
+               @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            <MudCheckBox Value="@PromoEx.DwMonday" Disabled="true"/>
+        </MudTd>
+        <MudTd DataLabel="Вт"
+               @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            <MudCheckBox Value="@PromoEx.DwTuesday" Disabled="true"/>
+        </MudTd>
+        <MudTd DataLabel="Ср"
+               @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            <MudCheckBox Value="@PromoEx.DwWednesday" Disabled="true"/>
+        </MudTd>
+        <MudTd DataLabel="Чт"
+               @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            <MudCheckBox Value="@PromoEx.DwThursday" Disabled="true"/>
+        </MudTd>
+        <MudTd DataLabel="Пт"
+               @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            <MudCheckBox Value="@PromoEx.DwFriday" Disabled="true"/>
+        </MudTd>
+        <MudTd DataLabel="Сб" @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            <MudCheckBox Value="@PromoEx.DwSaturday" Disabled="true"/>
+        </MudTd>
+        <MudTd DataLabel="Вс"
+               @ondblclick="@(() => EditPromotionExecution(PromoEx))">
+            <MudCheckBox Value="@PromoEx.DwSunday" Disabled="true"/>
+        </MudTd>
+        @* <MudTd>
+                <EditButton @onclick="@(() => EditPromotionExecution(PromoEx))"></EditButton>
+        </MudTd>
+        <MudTd>
+                <DeleteButton @onclick="@(() => OnDeleteHandler(PromoEx.Id))"></DeleteButton>
+        </MudTd> *@
+        <MudTd>
+            <ContextMenu OnCreateClick="OnAddPromoExecution" 
+                         OnEditClick="@(() => EditPromotionExecution(PromoEx))"
+                         OnDeleteClick="@(() => OnDeleteHandler(PromoEx.Id))"
+                         OnRefreshClick="@Update"/>
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    [Parameter] public int PromoId { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private List<PromotionExecution> PromotionExecution { get; set; } = new();
+    private bool _processing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Update();
+    }
+
+    private async Task Update()
+    {
+        _processing = true;
+
+        PromotionExecution = await SenderService.GetPromotionExecutions(PromoId);
+
+        _processing = false;
+    }
+
+    private async Task OnDeleteHandler(int promoExecutionId)
+    {
+        if (!(await IsDeletionConfirmed()))
+            return;
+
+        var command = new DeletePromotionExecutionCommand(promoExecutionId);
+        var result = await Sender.Send(command);
+
+        if (result.IsSuccess)
+        {
+            MsgService.ShowMessage(Severity.Success, "Группа событий успешно удалено");
+            await Update();
+        }
+        else
+        {
+            MsgService.ShowMessage(Severity.Error, $"Ошибка удаления. {result.Error.Description}");
+        }
+    }
+
+    private async Task OnAddPromoExecution()
+    {
+        var promoExecutionToCreate = Domain.Entities.PromotionExecution.Create(PromoId);
+        await EditPromotionExecution(promoExecutionToCreate, false);
+    }
+
+    private async Task EditPromotionExecution(PromotionExecution promotionExecution, bool isEdit = true)
+    {
+        var promotionExecutionVm = promotionExecution.Adapt<PromotionExecutionVm>();
+        var parameters = new DialogParameters { ["PromoExecution"] = promotionExecutionVm, ["IsEdit"] = isEdit };
+        var dialog = await DialogService.ShowAsync<AddOrUpdatePromoExecution>(
+            $"Расписание акции", 
+            parameters, 
+            DialogOptionsFactory.Create(MaxWidth.Small));
+
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            bool.TryParse(result.Data.ToString(), out bool successUpdate);
+            if (successUpdate)
+            {
+                MsgService.ShowMessage(Severity.Success, "Параметры акции успешно обновлены");
+                await Update();
+            }
+            else
+            {
+                MsgService.ShowMessage(Severity.Error, "Ошибка обновления данных акции");
+            }   
+        }
+    }
+
+    private async Task<bool> IsDeletionConfirmed()
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Внимание",
+            "Выполнение данного действия приведет к удалению записи из базы данных! Хотите продолжить?",
+            yesText: "Удалить!", cancelText: "Отмена");
+        return result != null;
+    }
+}

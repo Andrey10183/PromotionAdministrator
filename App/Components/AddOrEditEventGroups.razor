@@ -1,0 +1,150 @@
+﻿@using Comandante.App.Components.UiComponents.LoadingButton
+@using Comandante.Domain.Entities
+@using FluentValidation
+@using MediatR
+@using Microsoft.AspNetCore.Components
+@using Comandante.App.Helper
+@using Comandante.App.ModelsVm
+@using Comandante.Application.DomainIntents.EventGroups.Command.Create
+@using Comandante.Application.DomainIntents.EventGroups.Command.Update
+@using Comandante.Domain.Shared
+@using Mapster
+
+@inject ISender Sender
+
+<MudDialog>
+    <TitleContent>
+        <MudItem Class="d-flex align-content-center">
+            <MudIcon Size="Size.Large" Color="Color.Primary" Icon="@Icons.Material.Filled.GridView" />
+            <MudText Typo="Typo.h6" Class="pl-4">Группа событий</MudText>
+        </MudItem>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" Model="@EventGroup" @bind-IsValid="@_success">
+            <MudGrid Class="pa-2">
+                <MudItem xs="12" Class="d-flex flex-column gap-1">
+                    
+                    <MudTextField T="string"
+                                  Label="Код"
+                                  Disabled="@IsEdit"
+                                  @bind-Value="@EventGroup.Id" 
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Numbers"
+                                  Validation="@ValidatorFactory.EventGroupIdValidator.Validation"
+                                  Immediate="true" />
+                    
+                    <MudTextField T="string"
+                                  Label="Наименование"
+                                  @bind-Value="@EventGroup.Name"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Article"
+                                  Validation="@ValidatorFactory.NameValidator.Validation"
+                                  Immediate="true" />
+
+                    <MudCheckBox Label="Активен"
+                                 @bind-Value="EventGroup.IsActive" />
+
+                    <MudCheckBox Label="Удален"
+                                 @bind-Value="EventGroup.IsDeleted" />
+
+                    <MudTextField T="string"
+                                  Label="Дата изменения"
+                                  Disabled=true
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                                  Value="@UiHelper.GetDate(EventGroup.ChangeDateTime)" />
+
+                    <MudTextField T="string"
+                                  Label="Дата Создания"
+                                  Disabled=true
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                                  Value="@UiHelper.GetDate(EventGroup.CreateDateTime)" />
+
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <LoadingButton OnClick="OnAddOrEdit" Processing="@_processing"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Disabled="!_success">
+            Сохранить
+        </LoadingButton>
+        <MudButton OnClick="OnClose"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary">
+            Отмена
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+
+@code {
+
+    [Parameter] public EventGroupVm EventGroup { get; set; } = new();
+
+    [Parameter] public bool IsEdit { get; set; }
+
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    MudForm? _form;
+    
+    private bool _success;
+    private bool _processing;
+
+    private void OnClose()
+    {
+        MudDialog.Close(DialogResult.Cancel());
+    }
+
+    private async Task OnAddOrEdit()
+    {
+        if (_processing) return;
+
+        _processing = true;
+
+        Result<EventGroup> result;
+        var eventGroup = EventGroup.Adapt<EventGroup>();
+
+        if (IsEdit)
+        {
+            result = await UpdateEventGroup(eventGroup);
+        }
+        else
+        {
+            result = await CreateEventGroup(eventGroup);
+        }
+
+        _processing = false;
+
+        MudDialog.Close(DialogResult.Ok(result));
+
+    }
+
+    private async Task<Result<EventGroup>> UpdateEventGroup(EventGroup eventGroup)
+    {
+        var command = new UpdateEventGroupCommand(eventGroup);
+        var result = await Sender.Send(command);
+
+        return result;
+    }
+
+    private async Task<Result<EventGroup>> CreateEventGroup(EventGroup eventGroup)
+    {
+        var command = new CreateEventGroupCommand(eventGroup);
+        var result = await Sender.Send(command);
+
+        return result;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _form?.Validate();
+        base.OnAfterRender(firstRender);
+    }
+}
+
+
+

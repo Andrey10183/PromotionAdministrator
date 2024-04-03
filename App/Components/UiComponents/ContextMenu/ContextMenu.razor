@@ -1,0 +1,81 @@
+﻿<MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense="true">
+    @if (OnCreateClick.HasDelegate)
+    {
+        <MudMenuItem IconSize="Size.Small"
+                     IconColor="Color.Primary"
+                     Icon="@Icons.Material.Filled.Add"
+                     @onclick="@OnCreateClick">
+            Создать
+        </MudMenuItem>
+    }
+
+    @if (OnEditClick.HasDelegate)
+    {
+        <MudMenuItem IconSize="Size.Small"
+                     IconColor="Color.Primary"
+                     Icon="@Icons.Material.Filled.EditNote"
+                     @onclick="@OnEditClick">
+            Редактировать
+        </MudMenuItem>
+    }
+
+    @if (OnDeleteClick.HasDelegate)
+    {
+        <MudMenuItem IconSize="Size.Small"
+                     IconColor="Color.Primary"
+                     Icon="@Icons.Material.Filled.DeleteForever"
+                     @onclick="@OnDeleteClick">
+            Удалить
+        </MudMenuItem>
+    }
+
+    @if (OnDuplicateNewEvents.HasDelegate)
+    {
+        <MudMenuItem IconSize="Size.Small"
+                     IconColor="Color.Primary"
+                     Icon="@Icons.Material.Filled.ContentCopy"
+                     @onclick="OnDuplicateNewEvents">
+            Дубликат (создать новые копии событий)
+        </MudMenuItem>
+    }
+    
+    @if (OnDuplicateExistedEvents.HasDelegate)
+    {
+        <MudMenuItem IconSize="Size.Small"
+                     IconColor="Color.Primary"
+                     Icon="@Icons.Material.Filled.ContentCopy"
+                     @onclick="OnDuplicateExistedEvents">
+            Дубликат (привязать существующие события)
+        </MudMenuItem>
+    }
+
+    @if (OnDuplicateNoEvents.HasDelegate)
+    {
+        <MudMenuItem IconSize="Size.Small"
+                     IconColor="Color.Primary"
+                     Icon="@Icons.Material.Filled.ContentCopy"
+                     @onclick="OnDuplicateNoEvents">
+            Дубликат (не копировать события)
+        </MudMenuItem>
+    }
+    
+    @if (OnRefreshClick.HasDelegate)
+    {
+        <MudMenuItem IconSize="Size.Small"
+                     IconColor="Color.Primary"
+                     Icon="@Icons.Material.Filled.Refresh"
+                     @onclick="@OnRefreshClick">
+            Обновить
+        </MudMenuItem>
+    }
+</MudMenu>
+
+@code {
+    [Parameter] public EventCallback OnCreateClick { get; set; }
+    [Parameter] public EventCallback OnEditClick { get; set; }
+    [Parameter] public EventCallback OnDeleteClick { get; set; }
+    [Parameter] public EventCallback OnDuplicateNewEvents { get; set; }
+    [Parameter] public EventCallback OnDuplicateExistedEvents { get; set; }
+    [Parameter] public EventCallback OnDuplicateNoEvents { get; set; }
+    [Parameter] public EventCallback OnRefreshClick { get; set; }
+}

@@ -1,0 +1,242 @@
+﻿@using Comandante.App.Components.UiComponents.LoadingButton
+@using Comandante.App.Helper
+@using Comandante.Domain.Entities
+@using Mapster
+@using MediatR
+@using Microsoft.AspNetCore.Components
+@using Comandante.Application.DomainIntents.PromotionExecution.Command.UpdatePromotionExecution
+@using Comandante.App.ModelsVm
+@using Comandante.Application.DomainIntents.PromotionExecution.Command.CreatePromotionExecution
+
+@inject ISender Sender
+
+<MudDialog>
+    <TitleContent>
+        <MudItem Class="d-flex align-content-center gap-2">
+            <MudIcon Size="Size.Large" Color="Color.Primary" Icon="@Icons.Material.Filled.CalendarMonth" />
+            <MudText Typo="Typo.h6">Расписание ID:@PromoExecution.Id</MudText>
+            <MudSpacer/>
+            <MudCheckBox Label="Активен"
+                         @bind-Value="PromoExecution.IsActive" />
+
+            <MudCheckBox Label="Удален"
+                         @bind-Value="PromoExecution.IsDeleted" />
+        </MudItem>
+    </TitleContent>
+    <DialogContent>
+        <MudForm Model="@PromoExecution" @bind-IsValid="@_success">
+            <MudGrid Class="pa-2">
+                <MudItem xs="12" sm="5" Class="d-flex flex-column gap-1">
+                    
+                    <MudDatePicker Label="Дата Начала"
+                                   Disabled="@_setInfinityPeriod"
+                                   @bind-Date="@PromoExecution.BeginDate" />
+                    <MudTimePicker Label="Время начала"
+                                   Disabled="@_setInfinityPeriod"
+                                   @bind-Time="@_beginTime" />
+                    <MudDatePicker Label="Дата окончания"
+                                   Disabled="@_setInfinityPeriod"
+                                   @bind-Date="PromoExecution.EndDate" />
+                    <MudTimePicker Label="Время окончания"
+                                   Disabled="@_setInfinityPeriod"
+                                   @bind-Time="_endTime" />
+                    <MudCheckBox T="bool" 
+                                 Label="Бесконечно"
+                                 Value="_setInfinityPeriod"
+                                 CheckedChanged="@(() => SetInfinityPeriod(!_setInfinityPeriod))" />
+                    
+                </MudItem>
+                <MudItem xs="12" sm="2" Class="d-flex flex-column gap-2">
+                    <MudCheckBox T="bool?"
+                                 Label="Все"
+                                 Checked="@_isAllDaysSelected"
+                                 CheckedChanged="@(AllDaysSelect)"/>
+
+                    <MudCheckBox Label="Пн"
+                                 @bind-Value="PromoExecution.DwMonday"/>
+
+                    <MudCheckBox Label="Вт"
+                                 @bind-Value="PromoExecution.DwTuesday"/>
+
+                    <MudCheckBox Label="Ср"
+                                 @bind-Value="PromoExecution.DwWednesday"/>
+
+                    <MudCheckBox Label="Чт"
+                                 @bind-Value="PromoExecution.DwThursday"/>
+
+                    <MudCheckBox Label="Пт"
+                                 @bind-Value="PromoExecution.DwFriday"/>
+
+                    <MudCheckBox Label="Сб"
+                                 @bind-Value="PromoExecution.DwSaturday"/>
+
+                    <MudCheckBox Label="Вс"
+                                 @bind-Value="PromoExecution.DwSunday"/>
+                </MudItem>
+            <MudItem xs="12" sm="5" Class="d-flex flex-column gap-1">
+                <MudSelect Label="Канал продаж"
+                           T="int"
+                           @bind-Value="PromoExecution.SalesChannelId">
+                    @foreach (var channelType in CalcTypes.SaleChannelsValues)
+                    {
+                        <MudSelectItem Value="channelType.Id">
+                            @channelType.Name
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudTextField Label="Код магазина(-ов)"
+                    @bind-Value="PromoExecution.ShopCode"
+                    Variant="Variant.Outlined"
+                    Lines="6"
+                    Immediate="true"
+                    Validation="ValidatorFactory.PromoExecutionShopCodeValidator.Validation"/>
+                    
+                <MudTextField T="string" 
+                              Label="Дата изменения"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                              Disabled="true"
+                              Value="@GetDate(PromoExecution.ChangeDateTime)"/>
+                    
+                <MudTextField T="string" 
+                              Label="Дата Создания"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                              Disabled="true"
+                              Value="@GetDate(PromoExecution.CreateDateTime)"/>
+            </MudItem>
+        </MudGrid>
+    </MudForm>
+</DialogContent>
+<DialogActions>
+    <LoadingButton OnClick="OnAddOrEdit"
+               Variant="Variant.Filled"
+               Color="Color.Primary"
+               Processing="@_processing"
+               Disabled2="@(!_success)">
+        Сохранить
+    </LoadingButton>
+    <MudButton OnClick="OnClose"
+               Variant="Variant.Filled"
+               Color="Color.Primary">
+        Отмена
+    </MudButton>
+</DialogActions>
+</MudDialog>
+
+@code {
+
+    [Parameter] public PromotionExecutionVm PromoExecution { get; set; } = new();
+    [Parameter] public bool IsEdit { get; set; }
+
+    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
+
+    private bool _success;
+    private bool _setInfinityPeriod;
+    private bool _processing;
+    private bool _isAllDaysSelected = false;
+
+    private TimeSpan? _beginTime;
+    private TimeSpan? _endTime;
+
+    private void AllDaysSelect(bool? value)
+    {
+        if (value == null) return;
+        PromoExecution.DwMonday = !_isAllDaysSelected;
+        PromoExecution.DwTuesday = !_isAllDaysSelected;
+        PromoExecution.DwWednesday = !_isAllDaysSelected;
+        PromoExecution.DwThursday = !_isAllDaysSelected;
+        PromoExecution.DwFriday = !_isAllDaysSelected;
+        PromoExecution.DwSaturday = !_isAllDaysSelected;
+        PromoExecution.DwSunday = !_isAllDaysSelected;
+
+        _isAllDaysSelected = !_isAllDaysSelected;
+    }
+
+    protected override void OnParametersSet()
+    {
+        _beginTime = PromoExecution.BeginTime?.TimeOfDay;
+        _endTime = PromoExecution.EndTime?.TimeOfDay;
+    }
+
+    private void OnClose()
+    {
+        MudDialog?.Close(DialogResult.Cancel());
+    }
+
+    private async Task OnAddOrEdit()
+    {
+        if (_processing) return;
+        _processing = true;
+
+        PromoExecution.BeginTime = PromoExecution.BeginDate?.Date.Add(_beginTime ?? default);
+        PromoExecution.EndTime = PromoExecution.BeginDate?.Date.Add(_endTime ?? default);
+        var promotionExecution = PromoExecution.Adapt<PromotionExecution>();
+
+        var result = IsEdit ? 
+            await UpdatePromotionExecution(promotionExecution) : 
+            await CreatePromotionExecution(promotionExecution);
+
+        _processing = false;
+
+        MudDialog?.Close(DialogResult.Ok(result));
+    }
+
+    private async Task<bool> UpdatePromotionExecution(PromotionExecution promoExecution)
+    {
+        var command = new UpdatePromotionExecutionCommand(promoExecution);
+        var result = await Sender.Send(command);
+
+        return result.IsSuccess;
+    }
+
+    private async Task<bool> CreatePromotionExecution(PromotionExecution promoExecution)
+    {
+        var command = new CreatePromotionExecutionCommand(promoExecution);
+        var result = await Sender.Send(command);
+
+        return result.IsSuccess;
+    }
+
+    private void SetInfinityPeriod(bool value)
+    {
+        _setInfinityPeriod = value;
+
+        if (_setInfinityPeriod)
+        {
+            PromoExecution.BeginDate = GetMinValue();
+            PromoExecution.BeginTime = GetMinValue();
+            _beginTime = PromoExecution.BeginTime.Value.TimeOfDay;
+
+            PromoExecution.EndDate = GetMaxValue();
+            PromoExecution.EndTime = GetMaxValue();
+            _endTime = PromoExecution.EndDate.Value.TimeOfDay;
+        }
+        else
+        {
+            PromoExecution.BeginDate = DateTime.Now.Date;
+            PromoExecution.BeginTime = GetMinValue();
+            _beginTime = PromoExecution.BeginTime.Value.TimeOfDay;
+
+            PromoExecution.EndDate = DateTime.Now.AddDays(1).Date;
+            PromoExecution.EndTime = DateTime.MaxValue;
+            _endTime = PromoExecution.EndTime.Value.TimeOfDay;
+        }
+    }
+
+    private static DateTime GetMinValue()
+    {
+        return new DateTime(1753, 01, 01, 0, 0, 0);
+    }
+
+    private static DateTime GetMaxValue()
+    {
+        return new DateTime(9998, 12, 31, 23, 59, 59);
+    }
+
+    private static string GetDate(DateTime? date)
+    {
+        return date?.ToString("dd.MM.yyyy HH:mm:ss") ?? "";
+    }
+}

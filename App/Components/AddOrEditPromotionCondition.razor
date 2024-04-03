@@ -1,0 +1,280 @@
+﻿@using Comandante.App.Components.UiComponents.Header
+@using Comandante.App.Components.UiComponents.LoadingButton
+@using Comandante.App.Helper
+@using MediatR
+@using Comandante.Domain.Entities
+@using Microsoft.AspNetCore.Components
+@using Comandante.App.ModelsVm
+@using Comandante.App.Services
+@using Comandante.Application.DomainIntents.PromotionConditions.Command.CreatePromoCondition
+@using Comandante.Application.DomainIntents.PromotionConditions.Command.UpdatePromoCondition
+@using Mapster
+
+@inject ISender Sender
+@inject SenderService SenderService
+
+<MudDialog>
+    <TitleContent>
+        <MudItem Class="d-flex align-center">
+            <MudItem xs="6" Class="d-flex flex-row justify-content-start">
+                <MudIcon Size="Size.Large" Color="Color.Primary" Icon="@Icons.Material.Filled.GridView"/>
+                <MudText Typo="Typo.h6" Class="pl-4">Условия акции ID @PromoCondition.PromotionId </MudText>
+            </MudItem>
+            <MudItem xs="6" Class="d-flex flex-row justify-content-end">
+                <MudTextField T="string"
+                              Label="Дата изменения"
+                              Disabled=true
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                              Value="@UiHelper.GetDate(PromoCondition.ChangeDateTime)"/>
+
+                <MudTextField T="string"
+                              Label="Дата Создания"
+                              Disabled="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                              Value="@UiHelper.GetDate(PromoCondition.CreateDateTime)"/>
+            </MudItem>
+        </MudItem>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" Model="@PromoCondition" @bind-IsValid="@_success">
+            <MudGrid>
+                <MudItem xs="12" Class="d-flex flex-column">
+                        <MudPaper Class="pa-3 border-dotted border-2 mud-border-primary" Elevation="0">
+                        <CustomHeader Typo="Typo.body1" 
+                                      Name="Общее" 
+                                        Icon="@Icons.Material.Filled.KeyboardCommandKey"
+                                      IconSize="Size.Small"/>
+                        <MudStack Row="true" Spacing="4">
+                            <MudTextField Label="Группа"
+                                          @bind-Value="PromoCondition.EventGroupId"
+                                          Immediate="true"
+                                          Validation="@ValidatorFactory.EventGroupIdValidator.Validation"
+                                          Disabled="@(!IsEdit)"/>
+
+                            <MudNumericField Label="Строка"
+                                             @bind-Value="PromoCondition.ConditionLineNumber"
+                                             Required="true"
+                                             RequiredError="Обязательное поле"
+                                             Immediate="true"/>
+
+                            <MudNumericField Label="Приоритет"
+                                             @bind-Value="PromoCondition.Priority"
+                                             Required="true"
+                                             RequiredError="Обязательное поле"
+                                             Immediate="true"/>
+                            <MudCheckBox Label="Активен"
+                                         @bind-Value="PromoCondition.IsActive" />
+
+                            <MudCheckBox Label="Удален"
+                                         @bind-Value="PromoCondition.IsDeleted" />
+
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" Class="d-flex flex-row gap-4">
+                    <MudItem xs="6">
+                            <MudPaper Class="pa-3 mud-height-full border-dotted border-2 mud-border-primary" Height="40hv" Elevation="0">
+                            <CustomHeader Typo="Typo.body1" 
+                                          Name="Основание" 
+                                          Icon="@Icons.Material.Filled.Foundation"
+                                          IconSize="Size.Small"/>
+                            <MudStack>
+                                <MudSelect Label="Тип начисления"
+                                           T="string"
+                                           @bind-Value="PromoCondition.TypeChargeId">
+                                    @foreach (var calcType in CalcTypes.ValueCalcTypes)
+                                    {
+                                        <MudSelectItem Value="calcType.Id">
+                                            @calcType.Name
+                                        </MudSelectItem>
+                                    }
+                                </MudSelect>
+
+                                <MudNumericField Label="Парамеир начисления"
+                                                 @bind-Value="PromoCondition.ChargeParam"
+                                                 Required="true"
+                                                 RequiredError="Обязательное поле"
+                                                 Immediate="true"/>
+
+                                <MudCheckBox Label="Накопление"
+                                             @bind-Value="PromoCondition.IsAccumulation"/>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudPaper Class="pa-3 mud-height-full border-dotted border-2 mud-border-primary" Height="40hv" Elevation="0">
+                            <CustomHeader Typo="Typo.body1"
+                                          Name="Действие"
+                                          Icon="@Icons.Material.Filled.ChangeHistory"
+                                          IconSize="Size.Small" />
+                            <MudStack>
+                                <MudSelect Label="Тип расчета"
+                                           T="string"
+                                           @bind-Value="PromoCondition.TypeTchargeId">
+                                    @foreach (var calcType in CalcTypes.ValueCalcTypes)
+                                    {
+                                        <MudSelectItem Value="calcType.Id">
+                                            @calcType.Name
+                                        </MudSelectItem>
+                                    }
+                                </MudSelect>
+                                <MudNumericField Label="Параметр расчета"
+                                                 @bind-Value="PromoCondition.ChargeRparam"
+                                                 Required="true"
+                                                 RequiredError="Обязательное поле"
+                                                 Immediate="true"/>
+
+                                <MudSelect Label="Действие"
+                                           T="int"
+                                           @bind-Value="PromoCondition.ActionId">
+                                    @foreach (var action in _promotionActions)
+                                    {
+                                        <MudSelectItem Value="action.PromotionActionId">
+                                            @action.PromotionActionId. @action.Description
+                                        </MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+
+                </MudItem>
+                    <MudItem xs="12">
+                    <MudPaper Class="pa-3 border-dotted border-2 mud-border-primary" Elevation="0">
+                        <CustomHeader Typo="Typo.body1"
+                                      Name="Приз"
+                                      Icon="@Icons.Material.Filled.CardGiftcard"
+                                      IconSize="Size.Small" />
+                            <MudItem xs="12" Class="d-flex flex-row gap-4">
+                                <MudItem xs="6">
+                                    <MudSelect Label="Тип проверки значения"
+                                               T="string"
+                                               @bind-Value="PromoCondition.TypeCheckId">
+                                        @foreach (var calcType in CalcTypes.ValueCalcTypes)
+                                        {
+                                            <MudSelectItem Value="calcType.Id">
+                                                @calcType.Name
+                                            </MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                    <MudNumericField Label="Параметр проверки значения"
+                                                     @bind-Value="PromoCondition.ChargeCparam"
+                                                     Required="true"
+                                                     RequiredError="Обязательное поле"
+                                                     Immediate="true"/>
+                                    
+                                    <MudNumericField Label="Уровень корзины"
+                                                     @bind-Value="PromoCondition.CascadeNumber"
+                                                     Required="true"
+                                                     RequiredError="Обязательное поле"
+                                                     Immediate="true"/>
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudSelect Label="Тип списания"
+                                               T="string"
+                                               @bind-Value="PromoCondition.TypeChargeOffId">
+                                        @foreach (var calcType in CalcTypes.ValueCalcTypes)
+                                        {
+                                            <MudSelectItem Value="calcType.Id">
+                                                @calcType.Name
+                                            </MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                <MudNumericField Label="Параметр списания"
+                                                 @bind-Value="PromoCondition.ParamChargeOff"
+                                                 Required="true"
+                                                 RequiredError="Обязательное поле"
+                                                 Immediate="true" />
+                                </MudItem>
+                            </MudItem>
+                        </MudPaper>
+                    </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <LoadingButton OnClick="OnAddOrEdit"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Disabled2="@(!_success)"
+                       Processing="@_processing">
+            Сохранить
+        </LoadingButton>
+        <MudButton OnClick="OnClose"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary">
+            Отмена
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+
+    [Parameter] public PromotionConditionVm PromoCondition { get; set; } = new();
+
+    [Parameter] public bool IsEdit { get; set; }
+
+    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
+
+    MudForm? _form;
+    List<PromotionActions> _promotionActions = new();
+
+    private bool _success;
+    private bool _processing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _promotionActions = await SenderService.GetPromotionActions();
+    }
+
+    private void OnClose()
+    {
+        MudDialog?.Close(DialogResult.Cancel());
+    }
+
+    private async Task OnAddOrEdit()
+    {
+        _processing = true;
+
+        var promotion = PromoCondition.Adapt<PromotionCondition>();
+
+        PromotionCondition? result;
+
+        if (IsEdit)
+        {
+            result = await UpdatePromotionCondition(promotion);
+        }
+        else
+        {
+            result = await CreatePromotionCondition(promotion);
+        }
+
+        MudDialog?.Close(DialogResult.Ok(result));
+
+        _processing = false;
+    }
+
+    private async Task<PromotionCondition?> UpdatePromotionCondition(PromotionCondition promotionCondition)
+    {
+        var command = new UpdatePromoConditionCommand(promotionCondition);
+        var result = await Sender.Send(command);
+
+        return result.Value;
+    }
+
+    private async Task<PromotionCondition?> CreatePromotionCondition(PromotionCondition promotionCondition)
+    {
+        var command = new CreatePromoConditionCommand(promotionCondition);
+        var result = await Sender.Send(command);
+
+        return result.Value;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _form?.Validate();
+        base.OnAfterRender(firstRender);
+    }
+}

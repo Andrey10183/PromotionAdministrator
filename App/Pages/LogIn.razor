@@ -1,0 +1,169 @@
+﻿@page "/login"
+
+@using Comandante.App.Components
+@using Comandante.App.Components.UiComponents.LoadingButton
+@using Comandante.App.Components.UiComponents.PasswordInput
+@using MediatR
+@using Comandante.App.Services
+@using System.ComponentModel.DataAnnotations
+@using Comandante.Application.DomainIntents.Users.Query.GetUserByEmail
+
+@inject AuthenticationService AuthService
+@inject NavigationManager NavManager
+@inject ISender Sender
+
+<MudGrid Justify="Justify.Center">
+    <MudItem Style="height:calc(100vh - 90px)" Class="d-flex align-center">
+        <MudPaper Class="pa-4" Elevation="20" Style="width:400px">
+            <MudForm @ref="_form"
+                     @bind-IsValid="@_success"
+                     @bind-Errors="@_errors">
+                <MudItem Class="d-flex flex-row align-center gap-3">
+                    <MudIcon Size="Size.Large" Icon="@Icons.Material.Filled.Login" Color="Color.Primary"></MudIcon>
+                    <MudText Typo="Typo.h6">Вход в учетную запись</MudText>
+                </MudItem>
+                
+                <div id="myTextFieldWrapper">
+                    <MudTextField @bind-Value="@_email"
+                                  AutoFocus="false"
+                                  AdornmentIcon="@Icons.Material.Filled.Email"
+                                  Adornment="Adornment.Start"
+                                  HelperText="Введите ваш email"
+                                  Class="pt-8 pb-0"
+                                  Label="Email"
+                                  Required="true"
+                                  Immediate="true"
+                                  RequiredError="Email is required!"
+                                  Disabled="@_processing"
+                                  Validation="@(new EmailAddressAttribute() { ErrorMessage = "Данный email не валиден" })"/>
+                </div>
+                
+                <MudItem Class="d-flex flex-row align-center gap-2">
+                    <MudIcon Size="Size.Medium" Icon="@Icons.Material.Filled.Key"></MudIcon>
+                    <PasswordTextField T="string"
+                                       Class="pt-0"
+                                       AutoFocus="true"
+                                       HelperText="Введите ваш пароль"
+                                       @bind-Value="@_password"
+                                       Immediate="true"
+                                       Required="true"
+                                       RequiredError="Обязательное поле"/>
+                </MudItem>
+                
+                <MudItem Class="pt-10">
+                    <LoadingButton Variant="Variant.Filled"
+                                   FullWidth=true
+                                   OnClick="OnLogin"
+                                   Color="Color.Primary"
+                                   Processing="@_processing">
+                        ВХОД
+                    </LoadingButton>
+                </MudItem>
+                
+                
+                <MudItem Class="d-flex flex-row justify-center pa-1">
+                    <MudText>Или</MudText>
+                </MudItem>
+
+
+                <LoadingButton Variant="Variant.Outlined"
+                               FullWidth=true
+                               OnClick="RemindPassword"
+                               Color="Color.Primary"
+                               Processing="@_processing">
+                    Напомнить пароль
+                </LoadingButton>
+
+                <MudItem Class="pt-3">
+                    @if (_errorMessage is not null)
+                    {
+                        <MudAlert Severity="Severity.Warning"
+                                  Variant="Variant.Outlined"
+                                  Dense="true" Class="my-2">
+                            @_errorMessage
+                        </MudAlert>
+                    }
+                </MudItem>
+                <LegalAspect/>
+            </MudForm>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<style>
+    .center-vertically {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: calc(100vh - 150px); /* Set to 100% of the viewport height */
+    }
+</style>
+
+@code {
+
+    bool _success;
+    string[] _errors = { };
+
+    string _email = "";
+    string _password = "";
+    string? _errorMessage;
+    private bool _processing;
+
+    MudForm? _form;
+
+    private void RemindPassword()
+    {
+        NavManager.NavigateTo(string.IsNullOrEmpty(_email) ? 
+            $"/passwordReminder" : 
+            $"/passwordReminder/{_email}");
+    }
+
+    private async Task UserLogIn()
+    {
+        var query = new UserByEmailQuery(_email);
+        var userResult = await Sender.Send(query);
+
+        //User doesn't exist -> go to page new account creation page
+        if (userResult.IsFailure)
+        {
+            _errorMessage = $"{userResult.Error?.Description}";
+            return;
+        }
+
+        if (userResult.Value is null)
+        {
+            _errorMessage = "Ошибка получения данных. Обратитесь к разработчикам.";
+            return;
+        }
+
+        var user = userResult.Value;
+
+        if (user.Password.Equals(_password))
+        {
+            AuthService.LogIn(user);
+            NavManager.NavigateTo("/promotions");
+        }
+        else
+        {
+            _errorMessage = "Неверный логин или парполь";
+        }
+    }
+
+    private async Task OnLogin()
+    {
+        if (string.IsNullOrEmpty(_email) ||
+            string.IsNullOrEmpty(_password))
+        {
+            _errorMessage = "Не указан email или пароль";
+            return;
+        }
+        
+        if (_processing) return;
+
+        _processing = true;
+
+        await UserLogIn();
+
+        _processing = false;
+    }
+}

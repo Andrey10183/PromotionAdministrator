@@ -1,0 +1,263 @@
+﻿@using Comandante.App.Components.UiComponents.Header
+@using Comandante.App.Components.UiComponents.OperationButton
+@using Comandante.App.Components.UiComponents.ContextMenu
+@using Comandante.App.Components.UiComponents.PlaceHolder
+@using Comandante.App.Helper
+@using Comandante.Domain.Entities
+@using Comandante.Application.DomainIntents.PromotionConditions.Query.GetPromotionConditionsByPromoId
+@using Mapster
+@using MediatR
+@using Comandante.App.ModelsVm
+@using Comandante.App.Services
+@using Comandante.Application.DomainIntents.PromotionConditions.Command.Delete
+@using FluentValidation
+@using MudBlazor
+@using Severity = MudBlazor.Severity
+
+@inject ISender Sender
+@inject IDialogService DialogService
+@inject SenderService SenderService
+@inject SnackBarService MsgService
+
+
+<MudTable T="PromotionCondition"
+          Items="@_promotionConditions"
+          Style="font-size: 8px"
+          Hover="true"
+          Loading="@_processing"
+          LoadingProgressColor="Color.Info"
+          OnRowClick="@OnPromoConditionSelect"
+          RowStyleFunc="@PromoConditionSelectedStyle"
+          Dense=true
+          Elevation="5"
+          FixedHeader="true"
+          Height="@Height">
+    <HeaderContent>
+        <MudTh><CustomHeader Icon="@Icons.Material.Filled.ViewQuilt" IconSize="Size.Small" Typo="Typo.body2" Name="Группа" /></MudTh>
+        <MudTh><CustomHeader Icon="@Icons.Material.Filled.LowPriority" IconSize="Size.Small" Typo="Typo.body2" Name="Приор." /></MudTh>
+        <MudTh><CustomHeader Icon="@Icons.Material.Filled.Calculate" IconSize="Size.Small" Typo="Typo.body2" Name="Начисление" /></MudTh>
+        <MudTh><CustomHeader Icon="@Icons.Material.Filled.Calculate" IconSize="Size.Small" Typo="Typo.body2" Name="Проверка" /></MudTh>
+        <MudTh><CustomHeader Icon="@Icons.Material.Filled.Calculate" IconSize="Size.Small" Typo="Typo.body2" Name="Списание" /></MudTh>
+        <MudTh><CustomHeader Icon="@Icons.Material.Filled.Calculate" IconSize="Size.Small" Typo="Typo.body2" Name="Расчет" /></MudTh>
+        <MudTh>
+            <AddButton @onclick="@(() => OnAddHandler(PromoId.Value))" />
+        </MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Группа"
+               @ondblclick="@(() => OnEditHandler(context))">
+            <b>@context.EventGroupId</b>
+        </MudTd>
+        <MudTd DataLabel="Приор."
+               @ondblclick="@(() => OnEditHandler(context))">
+            @context.Priority
+        </MudTd>
+        <MudTd DataLabel="Парам. Начисл."
+               @ondblclick="@(() => OnEditHandler(context))">
+            <ConditionParamPlaceholder Param="@context.ChargeParam"
+                                       ParamId="@context.TypeChargeId" />
+        </MudTd>
+        <MudTd DataLabel="Парам. Провер."
+               @ondblclick="@(() => OnEditHandler(context))">
+            
+            <ConditionParamPlaceholder Param="@context.ChargeCparam"
+                                       ParamId="@context.TypeCheckId" />
+        </MudTd>
+        <MudTd DataLabel="Парам. Списан."
+               @ondblclick="@(() => OnEditHandler(context))">
+            
+            <ConditionParamPlaceholder Param="@context.ParamChargeOff"
+                                       ParamId="@context.TypeChargeOffId" />
+        </MudTd>
+        <MudTd DataLabel="Парам. Расчета"
+               @ondblclick="@(() => OnEditHandler(context))">
+            
+            <ConditionParamPlaceholder Param="@context.ChargeRparam"
+                                       ParamId="@context.TypeTchargeId" />
+        </MudTd>
+        <MudTd>
+            <ContextMenu OnCreateClick="@(() => OnAddHandler(PromoId.Value))"
+                         OnEditClick="@(() => OnEditHandler(context))"
+                         OnDeleteClick="@(() => OnDeleteHandler(context.Id))" 
+                         OnRefreshClick="@Update" />
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+<style>
+        .text-container {
+            width: 100%; /* Set the width of your specific area */
+            height: 40vh; /* Set the height of your specific area */
+            -webkit-mask-image: linear-gradient(180deg, #000 80%, transparent);
+            overflow: no-content; /* Hide overflow content */
+            border: 1px;
+        }
+
+        .faded-text {
+            margin: 0; /* Remove default margin for better control */
+            overflow: no-display; /* Hide overflow content */
+            white-space: normal; /* Prevent text from wrapping to the next line */
+            text-overflow: ellipsis; /* Display ellipsis (...) for truncated text */
+            padding-right: 10px; /* Add padding to accommodate the fade effect */
+        }
+</style>
+
+@code {
+    [Parameter] public int? PromoId  { get; set; }
+
+    [Parameter] public string Height  { get; set; } = string.Empty;
+
+    [Parameter] public EventCallback<PromotionCondition> OnRowClick { get; set; }
+
+    private PromotionCondition? _selectedPromoCondition;
+    private List<PromotionCondition> _promotionConditions = new();
+
+    private bool _processing;
+    private bool _editStarted;
+    private int? _selectedPromoId;
+
+    private async Task OnAddHandler(int? promoId)
+    {
+        await AddPromoCondition(promoId.Value);
+        await Update();
+        _selectedPromoCondition = _promotionConditions.MaxBy(x => x.Id);
+    }
+
+    private async Task OnEditHandler(PromotionCondition promotionCondition)
+    {
+        await EditPromoCondition(promotionCondition, true);
+    }
+
+    private async Task OnDeleteHandler(int id)
+    {
+        if (!(await IsDeletionConfirmed()))
+            return;
+
+        if (_processing) return;
+        _processing = true;
+
+        var command = new DeletePromotionConditionCommand(id);
+        var result = await Sender.Send(command);
+
+        if (result.IsSuccess)
+        {
+            MsgService.ShowMessage(Severity.Success, $"Условие акции удалено. Всего удалено записей {result.Value}");
+            await Update();
+        }
+        else
+        {
+            MsgService.ShowMessage(Severity.Error, $"Ошибка удаления условий акции. {result.Error.Description}");
+        }
+
+        _processing = false;
+    }
+
+    private async Task AddPromoCondition(int promoId)
+    {
+        var promoCondition = PromotionCondition.Create(promoId);
+
+        await EditPromoCondition(promoCondition, false);
+    }
+
+    private async Task EditPromoCondition(PromotionCondition promotionCondition, bool isEdit = true)
+    {
+        if (_editStarted) return;
+
+        _editStarted = true;
+
+        var promotionConditionVm = promotionCondition.Adapt<PromotionConditionVm>();
+
+        var parameters = new DialogParameters { ["PromoCondition"] = promotionConditionVm, ["IsEdit"] = isEdit };
+        var dialog = await DialogService.ShowAsync<AddOrEditPromotionCondition>(
+            $"Условие акции", 
+            parameters, 
+            DialogOptionsFactory.Create(MaxWidth.Medium));
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            if (result.Data is PromotionCondition res)
+            {
+                MsgService.ShowMessage(Severity.Success, "Параметры акции успешно обновлены");
+                await Update();
+                _selectedPromoCondition = res;
+            }
+            else
+            {
+                MsgService.ShowMessage(Severity.Error, "Ошибка обновления данных акции");
+            }
+        }
+
+        _editStarted = false;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_selectedPromoId != null && _selectedPromoId.Value == PromoId) return;
+
+        _selectedPromoId = PromoId;
+        
+        if (PromoId.Equals(_selectedPromoCondition?.PromotionId))
+            return;
+
+        if (PromoId == null)
+        {
+            ClearComponent();
+            StateHasChanged();
+            return;
+        }
+
+        _processing = true;
+        StateHasChanged();
+
+        _promotionConditions = await SenderService.GetPromoConditions(PromoId.Value);
+
+        _selectedPromoCondition = _promotionConditions?.Any() == true ?
+            _promotionConditions.First() :
+            null;
+
+        await OnRowClick.InvokeAsync(_selectedPromoCondition);
+
+        _processing = false;
+        StateHasChanged();
+    }
+
+    private void ClearComponent()
+    {
+        _selectedPromoCondition = null;
+        _promotionConditions = new();
+    }
+
+    private async Task OnPromoConditionSelect(TableRowClickEventArgs<PromotionCondition> p)
+    {
+        _selectedPromoCondition = p.Item;
+        await OnRowClick.InvokeAsync(p.Item);
+    }
+
+    private string PromoConditionSelectedStyle(PromotionCondition arg1, int index)
+    {
+        if (_selectedPromoCondition is null) return string.Empty;
+
+        return StyleHelper.GetSelectedRowStyle(_selectedPromoCondition.Id == arg1.Id);
+    }
+
+    private async Task Update()
+    {
+        _promotionConditions = await SenderService.GetPromoConditions(PromoId.Value);
+
+        _selectedPromoCondition = _promotionConditions.Any() ?
+            _promotionConditions.FirstOrDefault() : 
+            null;
+
+        await OnRowClick.InvokeAsync(_selectedPromoCondition);
+    }
+
+    private async Task<bool> IsDeletionConfirmed()
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Внимание",
+            "Выполнение данного действия приведет к удалению записи из базы данных! Помимо условия акции будут удалены связанные события, но только в том случае если эти события не имеет связи с другми условиями в как в пределах данной акции так и вне ее. Хотите продолжить?",
+            yesText: "Удалить!", cancelText: "Отмена");
+        return result != null;
+    }
+}

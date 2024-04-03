@@ -1,0 +1,20 @@
+﻿@page "/"
+
+@inject NavigationManager NavigationManager
+
+<AuthorizeView>
+    <Authorized>
+        @{
+            NavigationManager.NavigateTo("promotion");
+        }
+    </Authorized>
+    <NotAuthorized>
+        @{
+            //NavigationManager.NavigateTo("login");
+        }
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+
+}

@@ -1,0 +1,11 @@
+﻿@using Comandante.Domain.Entities
+
+<MudItem Class="d-flex flex-column">
+    <MudText Style="font-size: 12px"><b>@($"{Param:f2}")</b></MudText>
+    <MudText Style="font-size: 12px">@CalcTypes.ValueCalcTypes.FirstOrDefault(x => x.Id == ParamId)?.Name</MudText>
+</MudItem>
+
+@code {
+    [Parameter] public decimal Param { get; set; }
+    [Parameter] public string ParamId { get; set; }
+}

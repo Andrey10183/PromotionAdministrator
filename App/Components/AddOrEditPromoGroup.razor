@@ -1,0 +1,151 @@
+﻿@using Comandante.App.Components.UiComponents.LoadingButton
+@using Comandante.Application.DomainIntents.PromotionGroup.Command.CreatePromoGroup
+@using Comandante.Application.DomainIntents.PromotionGroup.Command.UpdatePromoGroup
+@using Comandante.Domain.Entities
+@using Mapster
+@using MediatR
+@using Microsoft.AspNetCore.Components
+@using Comandante.App.Helper
+@using Comandante.App.ModelsVm
+
+@inject ISender Sender
+
+<MudDialog>
+    <TitleContent>
+        <MudItem Class="d-flex align-content-center">
+            <MudIcon Size="Size.Large" Color="Color.Primary" Icon="@Icons.Material.Filled.GridView" />
+            <MudText Typo="Typo.h6" Class="pl-4">Группа акций</MudText>
+            </MudItem>
+        </TitleContent>
+        <DialogContent>
+        <MudForm @ref="_form" Model="@PromotionGroup" @bind-IsValid="@_success">
+            <MudGrid Class="pa-2">
+                <MudItem xs="12" Class="d-flex flex-column gap-1">
+                    
+
+                    <MudTextField Label="Код"
+                                  @bind-Value="PromotionGroup.Code"
+                                  Disabled="@IsEdit"
+                                  Validation="ValidatorFactory.PromoGroupCodeValidator.Validation"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Numbers"
+                                  Immediate="true" />
+                    
+                    <MudTextField Label="Наименование"
+                                  @bind-Value="PromotionGroup.Name"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Article"
+                                  Validation="ValidatorFactory.NameValidator.Validation"
+                                  Immediate="true" />
+
+                    <MudNumericField Label="Приоритет"
+                                     Adornment="Adornment.Start"
+                                     AdornmentIcon="@Icons.Material.Filled.LowPriority"
+                                     @bind-Value="PromotionGroup.Priority" />
+
+                    <MudCheckBox Label="Активен"
+                                 @bind-Value="PromotionGroup.IsActive" />
+
+                    <MudCheckBox Label="Удален"
+                                 @bind-Value="PromotionGroup.IsDeleted" />
+                    
+                    <MudTextField T="string" 
+                                  Label="Дата изменения"
+                                  Disabled=true
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                                  Value="@UiHelper.GetDate(PromotionGroup.ChangeDateTime)" />
+
+                    <MudTextField T="string" 
+                                  Label="Дата Создания"
+                                  Disabled=true
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                                  Value="@UiHelper.GetDate(PromotionGroup.CreateDateTime)" />
+                    
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <LoadingButton OnClick="OnAddOrEdit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled2="!_success"
+                   Processing="_processing">
+            Сохранить
+        </LoadingButton>
+        <MudButton OnClick="OnClose"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary">
+            Отмена
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+
+@code {
+
+    [Parameter] public PromotionGroupVm PromotionGroup { get; set; } = new();
+
+    [Parameter] public bool IsEdit { get; set; }
+
+    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
+
+    MudForm? _form;
+
+    private bool _success;
+    private bool _processing;
+
+    private void OnClose()
+    {
+        MudDialog?.Close(DialogResult.Cancel());
+    }
+
+    private async Task OnAddOrEdit()
+    {
+        if (_processing) return;
+        _processing = true;
+
+        var promotionGroup = PromotionGroup.Adapt<PromotionGroup>();
+
+        PromotionGroup result;
+
+        if (IsEdit)
+        {
+            result = await UpdateGroupDetails(promotionGroup);
+        }
+        else
+        {
+            result = await CreateGroupDetails(promotionGroup);
+        }
+
+        _processing = false;
+
+        MudDialog?.Close(DialogResult.Ok(result));
+    }
+
+    private async Task<PromotionGroup?> UpdateGroupDetails(PromotionGroup promotionGroup)
+    {
+        var command = new UpdatePromoGroupCommand(promotionGroup);
+        var result = await Sender.Send(command);
+
+        return result.Value;
+    }
+
+    private async Task<PromotionGroup?> CreateGroupDetails(PromotionGroup promotionGroup)
+    {
+        var command = new CreatePromoGroupCommand(promotionGroup);
+        var result = await Sender.Send(command);
+
+        return result.Value;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _form?.Validate();
+        base.OnAfterRender(firstRender);
+    }
+}
+
+

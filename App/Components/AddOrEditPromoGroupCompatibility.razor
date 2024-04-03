@@ -1,0 +1,205 @@
+﻿@using Comandante.Domain.Entities
+@using MediatR
+@using Microsoft.AspNetCore.Components
+@using Comandante.App.Helper
+@using Comandante.App.ModelsVm
+@using Comandante.App.Services
+@using Comandante.Application.DomainIntents.PromotionGroupsCompatibilities.Command.Create
+@using Comandante.Application.DomainIntents.PromotionGroupsCompatibilities.Command.Update
+@using Mapster
+
+@inject ISender Sender
+@inject SenderService SenderService
+
+<MudDialog>
+    <TitleContent>
+        <MudItem Class="d-flex align-content-center">
+            <MudIcon Size="Size.Large" Color="Color.Primary" Icon="@Icons.Material.Filled.GridView" />
+            <MudText Typo="Typo.h6" Class="pl-4">Группа акций</MudText>
+        </MudItem>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" Model="@Compatibility" @bind-IsValid="@_success">
+            <MudGrid Class="pa-2">
+                <MudItem xs="12" Class="d-flex flex-column gap-1">
+                    <MudAutocomplete T="string" 
+                                     Label="Группа акций X"
+                                     @bind-Value="Compatibility.PromotionGroupX"
+                                     SearchFunc="@SearchPromoGroup"
+                                     ResetValueOnEmptyText="true"
+                                     Adornment="Adornment.Start"
+                                     AdornmentIcon="@Icons.Material.Filled.ViewQuilt"
+                                     MaxItems="null"
+                                     CoerceText="true" 
+                                     CoerceValue="true" 
+                                     Required="true"
+                                     RequiredError="Обязательное поле"
+                                     Immediate="true"
+                                     ToStringFunc="@((e) => PromoGroupToUiName(e))"
+                                     Validation="@(new Func<string, IEnumerable<string>>(PromoGroupValidation))" />
+                    
+                    <MudAutocomplete T="string"
+                                     Label="Группа акций Y"
+                                     @bind-Value="Compatibility.PromotionGroupY"
+                                     SearchFunc="@SearchPromoGroup"
+                                     ResetValueOnEmptyText="true"
+                                     Adornment="Adornment.Start"
+                                     AdornmentIcon="@Icons.Material.Filled.ViewQuilt"
+                                     MaxItems="null"
+                                     CoerceText="true"
+                                     CoerceValue="true" 
+                                     Required="true"
+                                     RequiredError="Обязательное поле"
+                                     Immediate="true"
+                                     ToStringFunc="@((e) => PromoGroupToUiName(e))" />
+
+                    <MudSelect Label="Тип совместимости"
+                               T="int"
+                               @bind-Value="Compatibility.CompatibilityType"
+                               Adornment="Adornment.Start"
+                               AdornmentIcon="@Icons.Material.Filled.CompareArrows">
+                        @foreach (var compType in CalcTypes.PromoGroupCompabilityValues)
+                        {
+                            <MudSelectItem Value="compType.Id">
+                                @compType.Name
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudCheckBox Label="Активен"
+                                 @bind-Value="Compatibility.IsActive" />
+
+                    <MudCheckBox Label="Удален"
+                                 @bind-Value="Compatibility.IsDeleted" />
+
+                    <MudTextField T="string"
+                                  Label="Дата изменения"
+                                  Disabled=true
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                                  Value="@UiHelper.GetDate(Compatibility.ChangeDateTime)" />
+
+                    <MudTextField T="string"
+                                  Label="Дата Создания"
+                                  Disabled=true
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                                  Value="@UiHelper.GetDate(Compatibility.CreateDateTime)" />
+                                  
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="OnAddOrEdit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="!_success">
+            Сохранить
+        </MudButton>
+        <MudButton OnClick="OnClose"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary">
+            Отмена
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+
+@code {
+
+    [Parameter] public PromotionGroupsCompatibilityVm Compatibility { get; set; } = new();
+
+    [Parameter] public bool IsEdit { get; set; }
+
+    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
+
+    MudForm? _form;
+
+    private List<PromotionGroup> _promotionGroups = new();
+
+    private bool _success;
+
+    private IEnumerable<string> PromoGroupValidation(string pw)
+    {
+        if (string.IsNullOrWhiteSpace(pw))
+        {
+            yield return "Обязательное поле";
+            yield break;
+        }
+        if (pw == Compatibility.PromotionGroupX && 
+            pw == Compatibility.PromotionGroupY)
+            yield return "Группы акций должны различаться";
+    }
+
+    private string PromoGroupToUiName(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return "";
+
+        var name = _promotionGroups?.FirstOrDefault(x => x.Code == input)?.Name ?? "";
+        return $"{input}.{name}";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _promotionGroups = await SenderService.GetPromotionsGroups();
+    }
+
+    private Task<IEnumerable<string>> SearchPromoGroup(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return Task.FromResult(UiHelper.GetPromoGroupNames(_promotionGroups));
+
+        return Task.FromResult(UiHelper.GetPromoGroupNames(_promotionGroups
+            .Where(x =>x.Code.Contains(value, StringComparison.InvariantCultureIgnoreCase))
+            .ToList()));
+    }
+
+    private void OnClose()
+    {
+        MudDialog?.Close(DialogResult.Cancel());
+    }
+
+    private async Task OnAddOrEdit()
+    {
+        var compatibility = Compatibility.Adapt<PromotionGroupsCompatibility>();
+
+        PromotionGroupsCompatibility? result;
+
+        if (IsEdit)
+        {
+            result = await UpdateCompability(compatibility);
+        }
+        else
+        {
+            result = await CreateCompability(compatibility);
+        }
+
+        MudDialog?.Close(DialogResult.Ok(result));
+    }
+
+    private async Task<PromotionGroupsCompatibility?> UpdateCompability(PromotionGroupsCompatibility compatibility)
+    {
+        var command = new UpdatePromotionGroupsCompatibilityCommand(compatibility);
+        var result = await Sender.Send(command);
+
+        return result.Value;
+    }
+
+    private async Task<PromotionGroupsCompatibility?> CreateCompability(PromotionGroupsCompatibility compatibility)
+    {
+        var command = new CreatePromotionGroupsCompatibilityCommand(compatibility);
+        var result = await Sender.Send(command);
+
+        return result.Value;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _form?.Validate();
+        base.OnAfterRender(firstRender);
+    }
+}
+
+
